@@ -10,6 +10,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+const LAB_FLAG = "FLAG{AUTH_BYPASS_123}";
+
 const fakeUsers = [
   { id: 1, username: "admin", role: "Administrator", status: "Active" },
   { id: 2, username: "analyst01", role: "Analyst", status: "Pending" },
@@ -26,6 +28,13 @@ const SandboxLabApp = () => {
   const [success, setSuccess] = useState("");
   const [executedQuery, setExecutedQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyFlag = () => {
+    navigator.clipboard.writeText(LAB_FLAG);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -208,6 +217,21 @@ const SandboxLabApp = () => {
 
           {view === "dashboard" && (
             <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+              <div className="rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-4 shadow-lg">
+                <p className="text-xs font-mono text-amber-400 uppercase tracking-wider mb-2">🏆 Lab Flag - Copy & Submit</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <code className="text-lg font-mono font-bold text-amber-200 select-all bg-slate-900/60 px-3 py-2 rounded-lg border border-amber-500/40">
+                    {LAB_FLAG}
+                  </code>
+                  <button
+                    onClick={copyFlag}
+                    className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 py-2 text-sm font-mono font-semibold text-slate-950 transition-colors"
+                  >
+                    {copied ? "✓ Copied!" : "Copy Flag"}
+                  </button>
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-mono font-bold text-slate-50">
