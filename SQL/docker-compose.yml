@@ -1,0 +1,54 @@
+services:
+  web:
+    build:
+      context: ./Lab
+      dockerfile: Dockerfile
+    container_name: sql_lab_web
+    ports:
+      - "4000:5173"
+    volumes:
+      - ./Lab:/app
+      - /app/node_modules
+    networks:
+      - lab_network
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: sql_lab_api
+    ports:
+      - "3000:80"
+    volumes:
+      - ./api:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - lab_network
+
+  db:
+    image: mysql:8.0
+    container_name: sql_lab_db
+    environment:
+      MYSQL_DATABASE: security_lab_db
+      MYSQL_USER: lab_user
+      MYSQL_PASSWORD: lab_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lab_network
+
+networks:
+  lab_network:
+    driver: bridge
+
+volumes:
+  db_data:
