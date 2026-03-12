@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Lock,
   User,
@@ -8,9 +8,14 @@ import {
   LogOut,
   Users,
   Trash2,
+  XCircle,
 } from "lucide-react";
 
 const LAB_FLAG = "FLAG{AUTH_BYPASS_123}";
+
+// HackMe API for token verification (Labs runs on port 4000, HackMe typically on port 80)
+const HACKME_API_BASE =
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
 
 const fakeUsers = [
   { id: 1, username: "admin", role: "Administrator", status: "Active" },
@@ -21,6 +26,7 @@ const fakeUsers = [
 const API_URL = "http://localhost:3000";
 
 const SandboxLabApp = () => {
+  const [accessStatus, setAccessStatus] = useState("checking"); // 'checking' | 'granted' | 'denied'
   const [view, setView] = useState("login"); // 'login' | 'dashboard' | 'admin'
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +35,26 @@ const SandboxLabApp = () => {
   const [executedQuery, setExecutedQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const labId = params.get("labId");
+    const token = params.get("token");
+    if (!labId || !token) {
+      setAccessStatus("denied");
+      return;
+    }
+    (async () => {
+      try {
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const res = await fetch(url);
+        const data = await res.json().catch(() => ({}));
+        setAccessStatus(data.valid ? "granted" : "denied");
+      } catch {
+        setAccessStatus("denied");
+      }
+    })();
+  }, []);
 
   const copyFlag = () => {
     navigator.clipboard.writeText(LAB_FLAG);
@@ -89,6 +115,36 @@ const SandboxLabApp = () => {
     setPassword("");
   };
 
+  if (accessStatus === "checking") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-10 h-10 border-2 border-emerald-500/50 border-t-emerald-400 rounded-full animate-spin mb-4" />
+          <p className="text-sm font-mono text-slate-400">Verifying lab access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === "denied") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-rose-500/50 bg-slate-900/90 p-8 text-center shadow-2xl">
+          <div className="flex justify-center mb-4">
+            <div className="h-14 w-14 rounded-xl bg-rose-500/10 border border-rose-400/60 flex items-center justify-center">
+              <XCircle className="w-8 h-8 text-rose-400" />
+            </div>
+          </div>
+          <h1 className="text-xl font-mono font-bold text-rose-200 mb-2">Access Denied</h1>
+          <p className="text-sm text-slate-400 font-mono">
+            This lab can only be opened from the Start Lab button in HackMe. Please go to the lab details page and click Start Lab.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // accessStatus === "granted" - show lab
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50">
       {view === "login" && (
