@@ -1,7 +1,14 @@
-services:
+﻿services:
   web:
     build: .
+    container_name: dom_xss_select_lab
     ports:
-      - '4002:80'
+      - "4002:80"
     volumes:
       - .:/var/www/html
+    networks:
+      - xss_network
+
+networks:
+  xss_network:
+    driver: bridge
