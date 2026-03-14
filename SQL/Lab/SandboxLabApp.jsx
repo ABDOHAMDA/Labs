@@ -1,40 +1,63 @@
-import React, { useState, useEffect } from "react";
-import {
-  Lock,
-  User,
-  Shield,
-  Settings,
-  BarChart3,
-  LogOut,
-  Users,
-  Trash2,
-  XCircle,
-} from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { User, LogOut, X, CheckCircle2, ArrowLeft } from "lucide-react";
 
 const LAB_FLAG = "FLAG{AUTH_BYPASS_123}";
-
-// HackMe API for token verification (Labs runs on port 4000, HackMe typically on port 80)
 const HACKME_API_BASE =
   window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
-
-const fakeUsers = [
-  { id: 1, username: "admin", role: "Administrator", status: "Active" },
-  { id: 2, username: "analyst01", role: "Analyst", status: "Pending" },
-  { id: 3, username: "intern", role: "Viewer", status: "Suspended" },
-];
-
 const API_URL = "http://localhost:3000";
 
+// Luxury watch store products with high-quality images
+const WATCHES = [
+  {
+    id: 1,
+    name: "Chronos Elite",
+    price: "$2,450",
+    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop",
+  },
+  {
+    id: 2,
+    name: "Apex Heritage",
+    price: "$3,200",
+    image: "https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=400&fit=crop",
+  },
+  {
+    id: 3,
+    name: "Onyx Classic",
+    price: "$1,890",
+    image: "https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?w=400&h=400&fit=crop",
+  },
+  {
+    id: 4,
+    name: "Nova Sport",
+    price: "$2,100",
+    image: "https://images.unsplash.com/photo-1614164185126-3b2c94b43b92?w=400&h=400&fit=crop",
+  },
+  {
+    id: 5,
+    name: "Royal Sapphire",
+    price: "$4,500",
+    image: "https://images.unsplash.com/photo-1594534475808-b18fc33b045e?w=400&h=400&fit=crop",
+  },
+  {
+    id: 6,
+    name: "Eclipse Minimal",
+    price: "$1,650",
+    image: "https://images.unsplash.com/photo-1585123334904-845d60e97b29?w=400&h=400&fit=crop",
+  },
+];
+
 const SandboxLabApp = () => {
-  const [accessStatus, setAccessStatus] = useState("checking"); // 'checking' | 'granted' | 'denied'
-  const [view, setView] = useState("login"); // 'login' | 'dashboard' | 'admin'
+  const [accessStatus, setAccessStatus] = useState("checking");
+  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [view, setView] = useState("home"); // 'home' | 'signin' | 'profile' (when logged in)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [executedQuery, setExecutedQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [popup, setPopup] = useState(null); // { type: 'solved' | 'already_solved' }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -50,380 +73,379 @@ const SandboxLabApp = () => {
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
         setAccessStatus(data.valid ? "granted" : "denied");
+        if (data.valid) {
+          setLabParams({
+            labId,
+            token,
+            userId: data.user_id > 0 ? data.user_id : null,
+          });
+        }
       } catch {
         setAccessStatus("denied");
       }
     })();
   }, []);
 
-  const copyFlag = () => {
-    navigator.clipboard.writeText(LAB_FLAG);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const submitLabSolved = async () => {
+    const { labId, userId } = labParams;
+    if (!labId || !userId) return;
+    try {
+      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lab_id: Number(labId),
+          flag: LAB_FLAG,
+          user_id: userId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
+        const isFirstTime = data.message === "FLAG_CAPTURED";
+        setPopup({ type: isFirstTime ? "solved" : "already_solved" });
+        if (window.opener) {
+          window.opener.postMessage({ type: "LAB_SOLVED", labId }, "*");
+        }
+      }
+    } catch (_) {}
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    const un = usernameRef.current?.value ?? username;
+    const pw = passwordRef.current?.value ?? password;
     setError("");
-    setSuccess("");
     setLoading(true);
-
     try {
       const response = await fetch(`${API_URL}/login.php`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ username: un, password: pw }),
       });
-
       const text = await response.text();
-      console.log("API Response:", text);
-      
       let data;
       try {
         data = JSON.parse(text);
-      } catch (parseErr) {
-        setError("Invalid response from server: " + text.substring(0, 100));
+      } catch {
+        setError("Invalid response from server.");
+        setLoading(false);
         return;
       }
-
-      setExecutedQuery(data.query || "");
-
       if (data.success) {
-        setSuccess(data.message);
-        setTimeout(() => setView("dashboard"), 1000);
+        setUsername(un);
+        setPassword("");
+        if (usernameRef.current) usernameRef.current.value = "";
+        if (passwordRef.current) passwordRef.current.value = "";
+        setView("home");
+        setIsLoggedIn(true);
+        submitLabSolved();
       } else {
-        let errorMsg = data.message || "Login failed";
-        if (data.error) {
-          errorMsg += " - " + data.error;
-        }
-        setError(errorMsg);
+        setError(data.message || "Login failed");
       }
     } catch (err) {
-      console.error("Fetch error:", err);
-      setError("Connection error: " + err.message);
+      setError("Connection error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = () => {
-    setView("login");
+    setView("home");
+    setIsLoggedIn(false);
     setUsername("");
     setPassword("");
   };
 
+  const closePopup = () => setPopup(null);
+
+  // Loading state
   if (accessStatus === "checking") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block w-10 h-10 border-2 border-emerald-500/50 border-t-emerald-400 rounded-full animate-spin mb-4" />
-          <p className="text-sm font-mono text-slate-400">Verifying lab access...</p>
+          <div className="inline-block w-12 h-12 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin mb-4" />
+          <p className="text-sm text-stone-500 font-medium">Loading...</p>
         </div>
       </div>
     );
   }
 
+  // Access denied
   if (accessStatus === "denied") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full rounded-2xl border border-rose-500/50 bg-slate-900/90 p-8 text-center shadow-2xl">
-          <div className="flex justify-center mb-4">
-            <div className="h-14 w-14 rounded-xl bg-rose-500/10 border border-rose-400/60 flex items-center justify-center">
-              <XCircle className="w-8 h-8 text-rose-400" />
-            </div>
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-xl">
+          <div className="h-14 w-14 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4">
+            <X className="w-8 h-8 text-rose-500" />
           </div>
-          <h1 className="text-xl font-mono font-bold text-rose-200 mb-2">Access Denied</h1>
-          <p className="text-sm text-slate-400 font-mono">
-            This lab can only be opened from the Start Lab button in HackMe. Please go to the lab details page and click Start Lab.
+          <h1 className="text-xl font-semibold text-stone-800 mb-2">Access Denied</h1>
+          <p className="text-sm text-stone-500">
+            This lab can only be opened from the Start Lab button in HackMe.
           </p>
         </div>
       </div>
     );
   }
 
-  // accessStatus === "granted" - show lab
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black text-slate-50">
-      {view === "login" && (
-        <div className="flex items-center justify-center min-h-screen px-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl shadow-black/50">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-400/60 flex items-center justify-center">
-                <Lock className="w-5 h-5 text-emerald-300" />
+  // Header component (shown when logged in)
+  const Header = () => (
+    <header className="border-b border-stone-200 bg-white/95 backdrop-blur-sm sticky top-0 z-40">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <h1 className="text-xl font-serif font-semibold text-stone-800 tracking-wide">
+          Luxe Horology
+        </h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setView("profile")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-800 transition-colors"
+          >
+            <User className="w-4 h-4" />
+            My Account
+          </button>
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-800 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Log Out
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+
+  // Solved popup modal
+  const SolvedPopup = () => {
+    if (!popup) return null;
+    const isFirstTime = popup.type === "solved";
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-8 text-center animate-popup-in">
+          <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
+            isFirstTime ? "bg-emerald-100" : "bg-amber-100"
+          }`}>
+            <CheckCircle2 className={`w-10 h-10 ${
+              isFirstTime ? "text-emerald-600" : "text-amber-600"
+            }`} />
+          </div>
+          <h3 className="text-xl font-semibold text-stone-800 mb-2">
+            {isFirstTime ? "You solved the lab!" : "Already solved"}
+          </h3>
+          <p className="text-sm text-stone-500 mb-6">
+            {isFirstTime
+              ? "Congratulations! You've successfully completed this lab."
+              : "You've solved this lab before. No additional points awarded."}
+          </p>
+          <button
+            onClick={closePopup}
+            className="w-full rounded-lg bg-stone-900 hover:bg-stone-800 py-2.5 text-sm font-medium text-white transition-colors"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Home page - watch store
+  const HomePage = () => (
+    <main className="min-h-screen bg-stone-50">
+      <section className="py-16 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto text-center mb-12">
+          <p className="text-sm font-medium text-amber-600 tracking-widest uppercase mb-2">
+            Luxury Timepieces
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-serif font-semibold text-stone-800 mb-4">
+            Crafted for Excellence
+          </h2>
+          <p className="text-stone-500 max-w-xl mx-auto">
+            Discover our collection of precision-crafted watches, designed for those who appreciate timeless elegance.
+          </p>
+        </div>
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
+          {WATCHES.map((watch) => (
+            <div
+              key={watch.id}
+              className="group rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300"
+            >
+              <div className="aspect-square overflow-hidden bg-stone-100">
+                <img
+                  src={watch.image}
+                  alt={watch.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
               </div>
-              <div>
-                <p className="text-[11px] font-mono text-emerald-400 tracking-[0.18em] uppercase">
-                  // LAB_SANDBOX
-                </p>
-                <h1 className="text-xl font-bold font-mono text-slate-50">
-                  Secure Login Portal
-                </h1>
+              <div className="p-4">
+                <h3 className="font-semibold text-stone-800">{watch.name}</h3>
+                <p className="text-amber-600 font-medium mt-1">{watch.price}</p>
               </div>
             </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
 
+  // Profile page
+  const ProfilePage = () => (
+    <main className="min-h-screen bg-stone-50 py-12 px-4">
+      <div className="max-w-xl mx-auto">
+        <div className="rounded-2xl border border-stone-200 bg-white shadow-xl overflow-hidden">
+          <div className="h-24 bg-gradient-to-r from-stone-100 to-stone-50" />
+          <div className="px-6 pb-8 -mt-12">
+            <div className="h-24 w-24 rounded-full border-4 border-white bg-amber-100 flex items-center justify-center mx-auto shadow-lg">
+              <User className="w-12 h-12 text-amber-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-stone-800 text-center mt-4">
+              {username || "User"}
+            </h2>
+            <p className="text-sm text-stone-500 text-center">Member</p>
+            <div className="mt-8 space-y-4">
+              <div className="flex justify-between py-3 border-b border-stone-100">
+                <span className="text-stone-500">Username</span>
+                <span className="font-medium text-stone-800">{username || "—"}</span>
+              </div>
+              <div className="flex justify-between py-3 border-b border-stone-100">
+                <span className="text-stone-500">Account type</span>
+                <span className="font-medium text-stone-800">Standard</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setView("home")}
+              className="mt-6 w-full rounded-lg border border-stone-200 py-2.5 text-sm font-medium text-stone-600 hover:bg-stone-50 transition-colors"
+            >
+              Back to Store
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+
+  // Sign In page - inline to avoid focus loss (no inner component re-creation)
+  if (!isLoggedIn && view === "signin") {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <button
+            type="button"
+            onClick={() => setView("home")}
+            className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-800 mb-6 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Home
+          </button>
+          <div className="rounded-2xl border border-stone-200 bg-white shadow-xl p-8">
+            <h2 className="text-xl font-semibold text-stone-800 mb-6">Sign In</h2>
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  Username
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    className="w-full rounded-lg bg-slate-900 border border-slate-700 pl-9 pr-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-500 transition-all"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="operator"
-                  />
-                </div>
+                <label className="block text-xs font-medium text-stone-500 mb-1.5">Username</label>
+                <input
+                  ref={usernameRef}
+                  type="text"
+                  autoComplete="username"
+                  className="w-full rounded-lg border border-stone-200 px-3 py-2.5 text-sm text-stone-800 placeholder-stone-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  defaultValue={username}
+                  placeholder="Enter your username"
+                />
               </div>
-
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <Shield className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    className="w-full rounded-lg bg-slate-900 border border-slate-700 pl-9 pr-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-500 transition-all"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="********"
-                  />
-                </div>
+                <label className="block text-xs font-medium text-stone-500 mb-1.5">Password</label>
+                <input
+                  ref={passwordRef}
+                  type="password"
+                  autoComplete="current-password"
+                  className="w-full rounded-lg border border-stone-200 px-3 py-2.5 text-sm text-stone-800 placeholder-stone-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none"
+                  defaultValue=""
+                  placeholder="Enter your password"
+                />
               </div>
-
+              {error && <p className="text-xs text-rose-600">{error}</p>}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 py-2.5 text-sm font-mono font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-emerald-500 transition-all disabled:opacity-50"
+                className="w-full rounded-lg bg-stone-900 hover:bg-stone-800 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
               >
-                {loading ? "Logging in..." : "Login"}
+                {loading ? "Signing in..." : "Sign In"}
               </button>
             </form>
-
-            {error && (
-              <div className="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/50 text-rose-300 text-sm font-mono">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/50 text-emerald-300 text-sm font-mono">
-                {success}
-              </div>
-            )}
-
-            {executedQuery && (
-              <div className="mt-4 p-3 rounded-lg bg-slate-800 border border-slate-700">
-                <p className="text-[10px] font-mono text-amber-400 uppercase mb-2">Executed Query (for learning):</p>
-                <code className="text-xs font-mono text-slate-300 break-all">{executedQuery}</code>
-              </div>
-            )}
-
-            <div className="mt-6 p-4 rounded-lg bg-sky-500/10 border border-sky-500/30">
-              <p className="text-xs font-mono text-sky-400 font-semibold mb-2">💡 Lab Hint</p>
-              <p className="text-xs text-slate-400">This login form is vulnerable to SQL Injection.</p>
-              <p className="text-xs text-slate-400 mt-2">Try: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">' OR '1'='1</code> in the username field</p>
-              <p className="text-xs text-slate-400 mt-1">Or: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">admin'--</code> to bypass password check</p>
-            </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {view !== "login" && (
-        <>
-          <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
-            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-400/60 flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-emerald-300" />
+  // Home when not logged in - store with Sign In button
+  if (!isLoggedIn && view === "home") {
+    return (
+      <div className="min-h-screen bg-stone-50">
+        <div className="border-b border-stone-200 bg-white">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <h1 className="text-xl font-serif font-semibold text-stone-800 tracking-wide">
+              Luxe Horology
+            </h1>
+            <button
+              onClick={() => setView("signin")}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium transition-colors"
+            >
+              <User className="w-4 h-4" />
+              Sign In
+            </button>
+          </div>
+        </div>
+        <main className="py-16 px-4 sm:px-6">
+          <div className="max-w-6xl mx-auto text-center mb-12">
+            <p className="text-sm font-medium text-amber-600 tracking-widest uppercase mb-2">
+              Luxury Timepieces
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-serif font-semibold text-stone-800 mb-4">
+              Crafted for Excellence
+            </h2>
+            <p className="text-stone-500 max-w-xl mx-auto mb-6">
+              Discover our collection of precision-crafted watches. Sign in to explore exclusive offers.
+            </p>
+            <button
+              onClick={() => setView("signin")}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-medium transition-colors"
+            >
+              <User className="w-4 h-4" />
+              Sign In to Continue
+            </button>
+          </div>
+          <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
+            {WATCHES.map((watch) => (
+              <div
+                key={watch.id}
+                className="group rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300"
+              >
+                <div className="aspect-square overflow-hidden bg-stone-100">
+                  <img
+                    src={watch.image}
+                    alt={watch.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
                 </div>
-                <div>
-                  <p className="text-[10px] font-mono text-emerald-400 tracking-[0.18em] uppercase">
-                    // SANDBOX_ENV
-                  </p>
-                  <p className="text-xs font-mono text-slate-200">
-                    Internal Operations Console
-                  </p>
+                <div className="p-4">
+                  <h3 className="font-semibold text-stone-800">{watch.name}</h3>
+                  <p className="text-amber-600 font-medium mt-1">{watch.price}</p>
                 </div>
               </div>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex flex-col items-end text-[10px] font-mono text-slate-400">
-                  <span className="text-slate-200">
-                    USER::{username || "operator"}
-                  </span>
-                  <span>ROLE::ADMIN_SIM</span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-mono text-slate-300 hover:border-rose-500 hover:text-rose-300 transition-colors"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Logout
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {view === "dashboard" && (
-            <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-              <div className="rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-4 shadow-lg">
-                <p className="text-xs font-mono text-amber-400 uppercase tracking-wider mb-2">🏆 Lab Flag - Copy & Submit</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <code className="text-lg font-mono font-bold text-amber-200 select-all bg-slate-900/60 px-3 py-2 rounded-lg border border-amber-500/40">
-                    {LAB_FLAG}
-                  </code>
-                  <button
-                    onClick={copyFlag}
-                    className="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 py-2 text-sm font-mono font-semibold text-slate-950 transition-colors"
-                  >
-                    {copied ? "✓ Copied!" : "Copy Flag"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-mono font-bold text-slate-50">
-                    Welcome, {username || "operator"}
-                  </h2>
-                  <p className="text-xs sm:text-sm font-mono text-slate-400">
-                    Monitor simulated systems, review reports, and escalate to
-                    admin panel.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setView("admin")}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-xs font-mono font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-emerald-500 transition-all"
-                  >
-                    <Users className="w-4 h-4" />
-                    Go to Admin Panel
-                  </button>
-                </div>
-              </div>
-
-              <section className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-lg shadow-black/40">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-slate-400">
-                      PROFILE
-                    </span>
-                    <User className="w-4 h-4 text-emerald-300" />
-                  </div>
-                  <p className="text-sm text-slate-200">
-                    View simulated operator profile and access tokens.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-lg shadow-black/40">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-slate-400">
-                      SETTINGS
-                    </span>
-                    <Settings className="w-4 h-4 text-sky-300" />
-                  </div>
-                  <p className="text-sm text-slate-200">
-                    Adjust simulated environment parameters and flags.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-lg shadow-black/40">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-slate-400">
-                      REPORTS
-                    </span>
-                    <BarChart3 className="w-4 h-4 text-violet-300" />
-                  </div>
-                  <p className="text-sm text-slate-200">
-                    Review simulated incident reports and findings.
-                  </p>
-                </div>
-              </section>
-            </main>
-          )}
-
-          {view === "admin" && (
-            <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-mono font-bold text-slate-50">
-                    Admin Panel
-                  </h2>
-                  <p className="text-xs sm:text-sm font-mono text-slate-400">
-                    Manage simulated users and review access levels.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setView("dashboard")}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-mono text-slate-300 hover:border-emerald-500 hover:text-emerald-300 transition-colors"
-                >
-                  Back to Dashboard
-                </button>
-              </div>
-
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl shadow-black/40 overflow-x-auto">
-                <table className="min-w-full text-sm text-slate-200">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-xs text-slate-400 font-mono">
-                      <th className="py-2 pr-4 text-left">User</th>
-                      <th className="py-2 px-4 text-left">Role</th>
-                      <th className="py-2 px-4 text-left">Status</th>
-                      <th className="py-2 pl-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fakeUsers.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="border-b border-slate-800/60 last:border-b-0"
-                      >
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {user.username}
-                        </td>
-                        <td className="py-2 px-4 text-xs text-slate-300">
-                          {user.role}
-                        </td>
-                        <td className="py-2 px-4 text-xs">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] ${
-                              user.status === "Active"
-                                ? "bg-emerald-500/10 text-emerald-300 border-emerald-400/50"
-                                : user.status === "Pending"
-                                ? "bg-amber-500/10 text-amber-300 border-amber-400/50"
-                                : "bg-rose-500/10 text-rose-300 border-rose-400/50"
-                            }`}
-                          >
-                            {user.status}
-                          </span>
-                        </td>
-                        <td className="py-2 pl-4 text-right">
-                          <button
-                            className="inline-flex items-center gap-1 rounded-lg border border-rose-500/60 bg-rose-500/10 px-3 py-1 text-[11px] font-mono text-rose-200 hover:bg-rose-500/20 transition-colors"
-                            type="button"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            </main>
-          )}
-        </>
-      )}
+  // Logged in: home or profile
+  return (
+    <div className="min-h-screen bg-stone-50">
+      <Header />
+      {view === "home" && <HomePage />}
+      {view === "profile" && <ProfilePage />}
+      <SolvedPopup />
     </div>
   );
 };
 
 export default SandboxLabApp;
-
