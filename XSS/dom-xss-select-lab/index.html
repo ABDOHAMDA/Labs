@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luxe Horology - DOM XSS Lab</title>
+  <script>
+    (function(){
+      var orig = window.alert;
+      var HACKME_API = "http://localhost/HackMe/server/api/labs/lab_solved.php";
+      window.alert = function(){
+        var p = new URLSearchParams(window.location.search);
+        var labId = p.get("labId") || p.get("lab_id") || "";
+        var token = p.get("token") || "";
+        if (labId && token) {
+          fetch(HACKME_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lab_id: labId, token: token })
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var isFirstTime = data.success && data.message !== "LAB_ALREADY_SOLVED" && (data.data && data.data.points_earned > 0);
+            var pts = (data.data && data.data.points_earned) ? data.data.points_earned : 0;
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({ type: "HACKME_LAB_SOLVED", labId: labId, lab_id: labId, points: pts }, "*");
+            }
+            showSolvedModal(isFirstTime, pts);
+          })
+          .catch(function() { showSolvedModal(true, 100); });
+          return;
+        }
+        orig.apply(window, arguments);
+      };
+      window.showSolvedModal = function(isFirstTime, pts) {
+        var overlay = document.getElementById("solved-overlay");
+        var iconWrap = document.getElementById("solved-icon");
+        var title = document.getElementById("solved-title");
+        var msg = document.getElementById("solved-msg");
+        var ptsEl = document.getElementById("solved-pts");
+        if (overlay) {
+          if (iconWrap) {
+            iconWrap.className = "icon-wrap " + (isFirstTime ? "first" : "repeat");
+            iconWrap.textContent = "\u2713"; /* checkmark */
+          }
+          title.textContent = isFirstTime ? "You solved the lab!" : "Already solved";
+          msg.textContent = isFirstTime
+            ? "Congratulations! You've successfully completed this lab."
+            : "You've solved this lab before. No additional points awarded.";
+          if (isFirstTime && pts > 0) {
+            ptsEl.textContent = "+" + pts + " points added to your HackMe account!";
+            ptsEl.style.display = "block";
+          } else {
+            ptsEl.textContent = "";
+            ptsEl.style.display = "none";
+          }
+          overlay.classList.add("solved-visible");
+        }
+      };
+      window.closeSolvedModal = function() {
+        var overlay = document.getElementById("solved-overlay");
+        if (overlay) overlay.classList.remove("solved-visible");
+      };
+    })();
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fafaf9;
+      color: #292524;
+    }
+
+    .header {
+      border-bottom: 1px solid #e7e5e4;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .header-inner {
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .logo {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #292524;
+      letter-spacing: 0.025em;
+      font-family: Georgia, serif;
+    }
+    .search-bar {
+      flex: 1;
+      min-width: 200px;
+      max-width: 320px;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .search-bar input {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #e7e5e4;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      outline: none;
+    }
+    .search-bar input:focus {
+      border-color: #d97706;
+      box-shadow: 0 0 0 1px #d97706;
+    }
+    .search-bar button {
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      background: #292524;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    .search-bar button:hover { background: #1c1917; }
+
+    main { padding: 3rem 1.5rem; }
+    .container { max-width: 72rem; margin: 0 auto; }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .hero-badge {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #d97706;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .hero h2 {
+      font-size: 2rem;
+      font-weight: 600;
+      color: #292524;
+      margin: 0 0 1rem 0;
+      font-family: Georgia, serif;
+    }
+    .hero p {
+      color: #78716c;
+      max-width: 36rem;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    .watch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.5rem;
+    }
+    .watch-card {
+      border-radius: 1rem;
+      border: 1px solid #e7e5e4;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      transition: box-shadow 0.3s;
+    }
+    .watch-card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .watch-card .img-wrap {
+      aspect-ratio: 1;
+      overflow: hidden;
+      background: #f5f5f4;
+    }
+    .watch-card .img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .watch-card .info {
+      padding: 1rem;
+    }
+    .watch-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #292524;
+      margin: 0 0 0.25rem 0;
+    }
+    .watch-card .price {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #d97706;
+    }
+
+    /* Search tracking output - vulnerable DOM write appears here */
+    .search-display {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      font-size: 0.8125rem;
+      color: #57534e;
+    }
+
+    /* Lab solved modal - same style as SQL lab */
+    #solved-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+    #solved-overlay.solved-visible {
+      opacity: 1;
+      visibility: visible;
+    }
+    .solved-modal {
+      width: 100%;
+      max-width: 24rem;
+      border-radius: 1rem;
+      background: #fff;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+      padding: 2rem;
+      text-align: center;
+    }
+    .solved-modal .icon-wrap {
+      width: 4rem;
+      height: 4rem;
+      border-radius: 50%;
+      margin: 0 auto 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+    }
+    .solved-modal .icon-wrap.first { background: #d1fae5; }
+    .solved-modal .icon-wrap.first { color: #059669; }
+    .solved-modal .icon-wrap.repeat { background: #fef3c7; }
+    .solved-modal .icon-wrap.repeat { color: #d97706; }
+    .solved-modal h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #292524;
+      margin: 0 0 0.5rem 0;
+    }
+    .solved-modal p {
+      font-size: 0.875rem;
+      color: #78716c;
+      margin: 0 0 1.5rem 0;
+      line-height: 1.5;
+    }
+    .solved-modal .pts-msg {
+      color: #059669;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+    .solved-modal button {
+      width: 100%;
+      padding: 0.625rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      background: #292524;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    .solved-modal button:hover { background: #1c1917; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <h1 class="logo">Luxe Horology</h1>
+      <form class="search-bar" onsubmit="return doSearch(event);">
+        <input type="text" id="q" placeholder="Search watches..." value="" />
+        <button type="submit">Search</button>
+      </form>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="hero">
+        <p class="hero-badge">Luxury Timepieces</p>
+        <h2>Crafted for Excellence</h2>
+        <p>Discover our collection of precision-crafted watches, designed for those who appreciate timeless elegance.</p>
+      </div>
+
+     
+      <div class="search-display" id="tracking-output">
+        <span class="search-placeholder">Your search will appear here.</span>
+      </div>
+
+      <div class="watch-grid">
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop" alt="Chronos Elite" /></div>
+          <div class="info"><h3>Chronos Elite</h3><p class="price">$2,450</p></div>
+        </div>
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1587836374828-4dbafa94cf0e?w=400&h=400&fit=crop" alt="Apex Heritage" /></div>
+          <div class="info"><h3>Apex Heritage</h3><p class="price">$3,200</p></div>
+        </div>
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1542496658-e33a6d0d50f6?w=400&h=400&fit=crop" alt="Onyx Classic" /></div>
+          <div class="info"><h3>Onyx Classic</h3><p class="price">$1,890</p></div>
+        </div>
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1614164185126-3b2c94b43b92?w=400&h=400&fit=crop" alt="Nova Sport" /></div>
+          <div class="info"><h3>Nova Sport</h3><p class="price">$2,100</p></div>
+        </div>
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1594534475808-b18fc33b045e?w=400&h=400&fit=crop" alt="Royal Sapphire" /></div>
+          <div class="info"><h3>Royal Sapphire</h3><p class="price">$4,500</p></div>
+        </div>
+        <div class="watch-card">
+          <div class="img-wrap"><img src="https://images.unsplash.com/photo-1585123334904-845d60e97b29?w=400&h=400&fit=crop" alt="Eclipse Minimal" /></div>
+          <div class="info"><h3>Eclipse Minimal</h3><p class="price">$1,650</p></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Lab solved modal - same style as SQL lab -->
+  <div id="solved-overlay">
+    <div class="solved-modal">
+      <div class="icon-wrap first" id="solved-icon">✓</div>
+      <h3 id="solved-title">You solved the lab!</h3>
+      <p id="solved-msg">Congratulations! You've successfully completed this lab.</p>
+      <p id="solved-pts" class="pts-msg" style="display:none;"></p>
+      <button type="button" onclick="closeSolvedModal()">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    function doSearch(e) {
+      if (e) e.preventDefault();
+      var q = document.getElementById("q").value;
+      if (q) {
+        var params = new URLSearchParams(window.location.search);
+        params.set("search", q);
+        window.location.search = params.toString();
+      }
+      return false;
+    }
+    // Pre-fill search from URL
+    (function() {
+      var p = new URLSearchParams(location.search);
+      var s = p.get("search");
+      if (s) document.getElementById("q").value = s;
+    })();
+
+
+    (function() {
+      var el = document.getElementById("tracking-output");
+      if (el) {
+        var p = new URLSearchParams(location.search);
+        var searchVal = p.get("search") !== null ? p.get("search") : "";
+        el.innerHTML = '<span>Your search: ' + searchVal + '</span>';
+      }
+    })();
+  </script>
+</body>
+</html>
