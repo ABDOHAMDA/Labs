@@ -1,0 +1,16 @@
+FROM php:8.2-apache
+
+RUN docker-php-ext-install mysqli
+
+RUN a2enmod rewrite headers
+
+RUN echo '<Directory /var/www/html>\n\
+    Header set Access-Control-Allow-Origin "*"\n\
+    Header set Access-Control-Allow-Methods "POST, GET, OPTIONS"\n\
+    Header set Access-Control-Allow-Headers "Content-Type, Accept"\n\
+</Directory>' > /etc/apache2/conf-available/cors.conf \
+    && a2enconf cors
+
+WORKDIR /var/www/html
+
+EXPOSE 80
