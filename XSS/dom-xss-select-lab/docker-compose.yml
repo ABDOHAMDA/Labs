@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    ports:
+      - '4002:80'
+    volumes:
+      - .:/var/www/html
