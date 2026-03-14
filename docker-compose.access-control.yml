@@ -1,0 +1,54 @@
+services:
+  web:
+    build:
+      context: ./lab-access-control
+      dockerfile: Dockerfile
+    container_name: access_control_lab_web
+    ports:
+      - "4003:5173"
+    volumes:
+      - ./lab-access-control:/app
+      - /app/node_modules
+    networks:
+      - lab_ac_network
+
+  api:
+    build:
+      context: ./api-access-control
+      dockerfile: Dockerfile
+    container_name: access_control_lab_api
+    ports:
+      - "3001:80"
+    volumes:
+      - ./api-access-control:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - lab_ac_network
+
+  db:
+    image: mysql:8.0
+    container_name: access_control_lab_db
+    environment:
+      MYSQL_DATABASE: security_lab_db
+      MYSQL_USER: lab_user
+      MYSQL_PASSWORD: lab_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    volumes:
+      - ac_db_data:/var/lib/mysql
+      - ./seed-access-control.sql:/docker-entrypoint-initdb.d/seed.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lab_ac_network
+
+networks:
+  lab_ac_network:
+    driver: bridge
+
+volumes:
+  ac_db_data:

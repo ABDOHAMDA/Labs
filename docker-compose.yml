@@ -1,0 +1,57 @@
+services:
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: access_control_labs_web
+    environment:
+      - VITE_API_PROXY_TARGET=http://api:80
+    ports:
+      - "4003:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - lab_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: access_control_labs_api
+    ports:
+      - "3001:80"
+    volumes:
+      - ./lab1/api:/var/www/html/api/lab1
+      - ./lab2/api:/var/www/html/api/lab2
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - lab_network
+
+  db:
+    image: mysql:8.0
+    container_name: access_control_labs_db
+    environment:
+      MYSQL_DATABASE: security_lab_1
+      MYSQL_USER: lab_user
+      MYSQL_PASSWORD: lab_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    volumes:
+      - lab_db_data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lab_network
+
+networks:
+  lab_network:
+    driver: bridge
+
+volumes:
+  lab_db_data:
