@@ -224,7 +224,6 @@ function Lab2App() {
     if (!uid) return;
     const emailVal = (updateEmailInput || "").trim() || "user@gmail.com";
     setError("");
-    setSuccess("Done. Check the URL for userid and email.");
     setAccountEmail(emailVal);
     setSearchParams({ userid: String(uid), email: emailVal });
   };

@@ -16,13 +16,13 @@ function LabSelector() {
             to="/lab/1"
             className="block w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 text-center transition-colors"
           >
-            Lab 1 — Unprotected Admin Panel
+            Lab 1 — Unprotected Admin Panel (Lab ID 8)
           </Link>
           <Link
             to="/lab/2"
             className="block w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 text-center transition-colors"
           >
-            Lab 2 — IDOR &amp; My Account (Lab ID 6)
+            Lab 2 — IDOR &amp; My Account (Lab ID 9)
           </Link>
         </div>
       </div>
