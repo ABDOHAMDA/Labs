@@ -1,0 +1,14 @@
+﻿services:
+  web:
+    build: .
+    container_name: reflected_xss_lab
+    ports:
+      - "4001:80"
+    volumes:
+      - .:/var/www/html
+    networks:
+      - xss_network
+
+networks:
+  xss_network:
+    driver: bridge
