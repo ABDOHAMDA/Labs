@@ -1,4 +1,5 @@
-﻿<?php
+<?php
+ob_start();
 session_start();
 
 $labId = $_GET['labId'] ?? $_GET['lab_id'] ?? '';
