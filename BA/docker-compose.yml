@@ -3,7 +3,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: access_control_labs_web
+    container_name: ba_access_control_labs_web
     environment:
       - VITE_API_PROXY_TARGET=http://api:80
     ports:
@@ -18,7 +18,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    container_name: access_control_labs_api
+    container_name: ba_access_control_labs_api
     ports:
       - "3001:80"
     volumes:
@@ -32,7 +32,7 @@ services:
 
   db:
     image: mysql:8.0
-    container_name: access_control_labs_db
+    container_name: ba_access_control_labs_db
     environment:
       MYSQL_DATABASE: security_lab_1
       MYSQL_USER: lab_user
