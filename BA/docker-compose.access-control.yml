@@ -1,26 +1,29 @@
 services:
   web:
     build:
-      context: ./lab-access-control
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: access_control_lab_web
+    environment:
+      VITE_API_PROXY_TARGET: "http://api"
     ports:
       - "4003:5173"
     volumes:
-      - ./lab-access-control:/app
+      - ./frontend:/app
       - /app/node_modules
     networks:
       - lab_ac_network
 
   api:
     build:
-      context: ./api-access-control
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.api
     container_name: access_control_lab_api
     ports:
       - "3001:80"
     volumes:
-      - ./api-access-control:/var/www/html
+      - ./lab1/api:/var/www/html/api/lab1
+      - ./lab2/api:/var/www/html/api/lab2
     depends_on:
       db:
         condition: service_healthy
@@ -31,13 +34,13 @@ services:
     image: mysql:8.0
     container_name: access_control_lab_db
     environment:
-      MYSQL_DATABASE: security_lab_db
+      MYSQL_DATABASE: security_lab_1
       MYSQL_USER: lab_user
       MYSQL_PASSWORD: lab_pass
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - ac_db_data:/var/lib/mysql
-      - ./seed-access-control.sql:/docker-entrypoint-initdb.d/seed.sql
+      - ./db-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass"]
       interval: 5s
