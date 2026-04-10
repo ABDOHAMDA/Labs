@@ -28,9 +28,14 @@ $stmt = $conn->prepare("UPDATE users SET role = ? WHERE username = ?");
 $stmt->bind_param("ss", $role, $username);
 $stmt->execute();
 
-if ($conn->affected_rows > 0) {
+$verify = $conn->prepare("SELECT role FROM users WHERE username = ? LIMIT 1");
+$verify->bind_param("s", $username);
+$verify->execute();
+$vr = $verify->get_result()->fetch_assoc();
+
+if ($vr && $vr['role'] === $role) {
     $response['success'] = true;
-    $response['message'] = 'Role updated';
+    $response['message'] = $conn->affected_rows > 0 ? 'Role updated' : 'Already in role';
 } else {
     $response['message'] = 'User not found or no change';
 }

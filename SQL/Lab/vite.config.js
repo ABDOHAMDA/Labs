@@ -1,9 +1,13 @@
 import { defineConfig } from 'vite'
+import { existsSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 
-// In Docker, web container reaches PHP via service name "api". On host dev: localhost:3000.
+// Docker Compose should set VITE_API_PROXY_TARGET=http://api:80 on the web service.
+// If it is missing (old container), default to api:80 when running inside Docker — not 127.0.0.1:3000,
+// because localhost inside the web container is not the API container (proxy would ECONNREFUSED).
 const academyApiTarget =
-  process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3000'
+  process.env.VITE_API_PROXY_TARGET ||
+  (existsSync('/.dockerenv') ? 'http://api:80' : 'http://127.0.0.1:3000')
 
 export default defineConfig({
   plugins: [react()],

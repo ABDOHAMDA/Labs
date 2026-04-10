@@ -19,6 +19,8 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: access_control_lab_api
+    environment:
+      - MYSQL_HOST=db
     ports:
       - "3001:80"
     volumes:

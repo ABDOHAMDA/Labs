@@ -1,10 +1,87 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { Link, useSearchParams, useParams } from "react-router-dom";
-import { Lock, User, Shield, Mail, UserCog, LogOut } from "lucide-react";
+import { User, Shield, UserCog, CheckCircle2, X, Trash2, Lock, Mail, LogIn } from "lucide-react";
+
+const LAB_FLAG = "FLAG{IDOR_ACCESS_CONTROL_BYPASS}";
+const HACKME_API_BASE =
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+/** Must match admin row in DB / fallback users (student copies from admin profile). */
+const TARGET_ADMIN_EMAIL = "admin@lab.local";
+
+function isValidEmail(value) {
+  const s = String(value ?? "").trim();
+  if (!s) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function parseJsonLoginBody(text, httpStatus, sourceLabel) {
+  const trimmed = String(text ?? "").replace(/^\uFEFF/, "").trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      error: `Empty response from ${sourceLabel} (HTTP ${httpStatus}). Start the API container (port 3001) or check the Vite proxy.`,
+    };
+  }
+  try {
+    return { ok: true, data: JSON.parse(trimmed) };
+  } catch {
+    const html = trimmed.startsWith("<");
+    const preview = trimmed.slice(0, 200).replace(/\s+/g, " ");
+    return {
+      ok: false,
+      error: html
+        ? `${sourceLabel} returned an HTML page (HTTP ${httpStatus}) — wrong API URL or PHP error. Open http://localhost:3001/api/lab2/ping.php in the browser.`
+        : `Not JSON from ${sourceLabel} (HTTP ${httpStatus}): ${preview}${trimmed.length > 200 ? "…" : ""}`,
+    };
+  }
+}
+
+/** Shown after the student sets their account email to the real admin email (client-side only). */
+const INITIAL_DELEGATED_ADMINS = [
+  {
+    id: "d1",
+    fullName: "Sarah Chen",
+    username: "sarah.chen",
+    email: "sarah.chen@northgate-security.example",
+    role: "admin",
+  },
+  {
+    id: "d2",
+    fullName: "James O'Brien",
+    username: "james.obrien",
+    email: "j.obrien@northgate-security.example",
+    role: "admin",
+  },
+  {
+    id: "d3",
+    fullName: "Priya Nair",
+    username: "priya.nair",
+    email: "priya.nair@northgate-security.example",
+    role: "admin",
+  },
+  {
+    id: "d4",
+    fullName: "Marcus Webb",
+    username: "marcus.webb",
+    email: "marcus.webb@northgate-security.example",
+    role: "admin",
+  },
+];
 
 // Prefer proxy; fallback to direct port if proxy fails
 const API_BASE = '/api/lab2';
 const API_FALLBACK = `${window.location.protocol}//${window.location.hostname}:3001/api/lab2`;
+
+const LAB2_SESSION_KEY = "lab2_logged_session_v1";
+
+function searchParamsLabOnly(sourceParams) {
+  const sp = new URLSearchParams();
+  const lid = sourceParams.get("labId");
+  const tok = sourceParams.get("token");
+  if (lid) sp.set("labId", lid);
+  if (tok) sp.set("token", tok);
+  return sp;
+}
 
 function fetchApi(path) {
   const url = `${API_BASE}${path}`;
@@ -27,8 +104,6 @@ function fetchApiWithFallback(path) {
   }));
 }
 
-const FALLBACK_FLAG = 'FLAG{IDOR_ACCESS_CONTROL_BYPASS}';
-
 const FALLBACK_USERS = [
   { id: 1, username: 'admin', email: 'admin@lab.local', role: 'admin' },
   { id: 2, username: 'alice', email: 'alice@test.com', role: 'user' },
@@ -42,9 +117,7 @@ const FALLBACK_USERS = [
   { id: 10, username: 'henry', email: 'henry@test.com', role: 'user' },
 ];
 
-const FALLBACK_PROFILES = Object.fromEntries(
-  FALLBACK_USERS.map((u) => [u.id, { ...u, flag: u.id === 10 ? FALLBACK_FLAG : null }])
-);
+const FALLBACK_PROFILES = Object.fromEntries(FALLBACK_USERS.map((u) => [u.id, { ...u }]));
 
 const BLOGS = [
   { id: 1, title: "Red Team Operations", category: "Red Team", date: "Mar 12, 2025", minRead: 8, excerpt: "Offensive security and adversary simulation to test defenses.", content: `Red team operations simulate real-world attacks to identify gaps in security controls. Teams use the same tactics, techniques, and procedures (TTPs) as threat actors to test detection and response capabilities.
@@ -101,10 +174,18 @@ Legal and policy considerations: ensure lab use is authorized, data is synthetic
 
 function Lab2App() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [view, setView] = useState("loading");
-  const [username, setUsername] = useState("user");
+  const [accessStatus, setAccessStatus] = useState("checking");
+  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [popup, setPopup] = useState(null);
+  const [delegatedAdmins, setDelegatedAdmins] = useState(null);
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const labSolveSentRef = useRef(false);
+
+  const [view, setView] = useState("guest");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("user@gmail.com");
+  const [email, setEmail] = useState("");
   const [userId, setUserId] = useState(null);
   const [userRole, setUserRole] = useState("user");
   const [error, setError] = useState("");
@@ -115,75 +196,304 @@ function Lab2App() {
   const urlEmail = searchParams.get("email");
   const profileUserid = searchParams.get("profile");
 
-  const [accountUserid, setAccountUserid] = useState(urlUserid ? parseInt(urlUserid, 10) : null);
-  const [accountEmail, setAccountEmail] = useState(urlEmail || "");
+  const [accountUserid, setAccountUserid] = useState(null);
+  const [accountEmail, setAccountEmail] = useState("");
   const [updateEmailInput, setUpdateEmailInput] = useState("");
   const [users, setUsers] = useState([]);
   const [usersError, setUsersError] = useState(false);
   const [profile, setProfile] = useState(null);
-  const [route, setRoute] = useState(profileUserid ? "profile" : urlUserid ? "account" : "home");
+  const [route, setRoute] = useState("home");
   const { postId: urlPostId } = useParams();
   const currentPost = urlPostId ? BLOGS.find((b) => String(b.id) === String(urlPostId)) : null;
 
-  // Auto-login and go straight to blog (no login page). لو الـ URL فيه userid أو profile من قبل، متغيّرش الرابط عشان الصفحة الجديدة تفتح صح.
+  const labOnlySearch = () => searchParamsLabOnly(searchParams);
+
+  const toLabPath = (extra = {}) => {
+    const sp = labOnlySearch();
+    Object.entries(extra).forEach(([k, v]) => {
+      if (v === null || v === undefined || v === "") sp.delete(k);
+      else sp.set(k, String(v));
+    });
+    const q = sp.toString();
+    return q ? `/lab/2?${q}` : "/lab/2";
+  };
+
+  const postPath = (postId) => {
+    const q = labOnlySearch().toString();
+    return q ? `/lab/2/post/${postId}?${q}` : `/lab/2/post/${postId}`;
+  };
+
+  const mergeSearchParams = (updates) => {
+    const sp = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v === null || v === undefined) sp.delete(k);
+      else sp.set(k, String(v));
+    });
+    setSearchParams(sp);
+  };
+
   useEffect(() => {
-    if (view !== "loading") return;
-    fetch(`${API_BASE}/login.php`, {
+    const params = new URLSearchParams(window.location.search);
+    const labId = params.get("labId");
+    const token = params.get("token");
+    if (!labId || !token) {
+      setAccessStatus("denied");
+      return;
+    }
+    (async () => {
+      try {
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const res = await fetch(url);
+        const data = await res.json().catch(() => ({}));
+        setAccessStatus(data.valid ? "granted" : "denied");
+        if (data.valid) {
+          setLabParams({
+            labId,
+            token,
+            userId: data.user_id > 0 ? data.user_id : null,
+          });
+        }
+      } catch {
+        setAccessStatus("denied");
+      }
+    })();
+  }, []);
+
+  /** Restore login after full page reload (e.g. student edits userid in the address bar). */
+  useLayoutEffect(() => {
+    if (accessStatus !== "granted") return;
+    const raw = sessionStorage.getItem(LAB2_SESSION_KEY);
+    if (!raw) {
+      setView("guest");
+      return;
+    }
+    try {
+      const s = JSON.parse(raw);
+      if (s.userId == null) throw new Error("invalid");
+      setUserId(s.userId);
+      setUsername(s.username ?? "");
+      setEmail(s.email ?? "");
+      setUserRole(s.role ?? "user");
+      setView("logged");
+      const params = new URLSearchParams(window.location.search);
+      const pUser = params.get("userid");
+      const pEmail = params.get("email");
+      const pProf = params.get("profile");
+      if (pProf) {
+        setRoute("profile");
+        setAccountUserid(pUser ? parseInt(pUser, 10) : s.userId);
+        setAccountEmail(pEmail ?? s.email ?? "");
+      } else if (pUser) {
+        setRoute("account");
+        setAccountUserid(parseInt(pUser, 10));
+        setAccountEmail(pEmail ?? "");
+      } else {
+        setRoute("home");
+        setAccountUserid(s.userId);
+        setAccountEmail(s.email ?? "");
+      }
+    } catch {
+      try {
+        sessionStorage.removeItem(LAB2_SESSION_KEY);
+      } catch (_) {}
+      setView("guest");
+    }
+  }, [accessStatus]);
+
+  const submitLabSolved = async () => {
+    const { labId, userId: hackUserId, token } = labParams;
+    if (!labId || !token) {
+      setPopup({
+        type: "flag_error",
+        message: "Missing lab session. Open this lab from HackMe (Start Lab).",
+        detail: "",
+      });
+      return false;
+    }
+    const payload = {
+      lab_id: Number(labId),
+      flag: LAB_FLAG,
+      user_id: hackUserId > 0 ? hackUserId : 0,
+      access_token: token,
+    };
+    try {
+      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        setPopup({
+          type: "flag_error",
+          message: "Invalid response from HackMe",
+          detail: raw.slice(0, 200),
+        });
+        return false;
+      }
+      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
+        const isFirstTime = data.message === "FLAG_CAPTURED";
+        const ptsForParent =
+          data.message === "FLAG_CAPTURED"
+            ? typeof data.points === "number"
+              ? data.points
+              : 150
+            : 0;
+        setPopup({ type: isFirstTime ? "solved" : "already_solved" });
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: "HACKME_LAB_SOLVED", labId: Number(labId), lab_id: Number(labId), points: ptsForParent },
+            "*"
+          );
+          window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
+        }
+        return true;
+      }
+      const errMsg = data.detail || data.message || `HackMe error (HTTP ${res.status})`;
+      setPopup({ type: "flag_error", message: errMsg, detail: data.message || "" });
+      return false;
+    } catch (e) {
+      setPopup({
+        type: "flag_error",
+        message: e instanceof Error ? e.message : "Network error — is HackMe running?",
+        detail: "",
+      });
+      return false;
+    }
+  };
+
+  const applyLoginSuccess = (data) => {
+    const uid = data.user.id;
+    const uEmail = data.user.email || "";
+    const uname = data.user.username || "";
+    const role = data.user.role || "user";
+    setUserId(uid);
+    setUsername(uname);
+    setEmail(uEmail);
+    setUserRole(role);
+    setPassword("");
+
+    try {
+      sessionStorage.setItem(
+        LAB2_SESSION_KEY,
+        JSON.stringify({ userId: uid, username: uname, email: uEmail, role })
+      );
+    } catch (_) {}
+
+    const params = new URLSearchParams(window.location.search);
+    const hasUserid = params.has("userid");
+    const hasProfile = params.has("profile");
+    if (hasUserid || hasProfile) {
+      setAccountUserid(hasUserid ? parseInt(params.get("userid"), 10) : uid);
+      setAccountEmail(params.get("email") || uEmail);
+      setRoute(hasProfile ? "profile" : "account");
+      setUpdateEmailInput(params.get("email") || "");
+    } else {
+      setAccountUserid(uid);
+      setAccountEmail(uEmail);
+      setRoute("home");
+      setUpdateEmailInput("");
+      setSearchParams(searchParamsLabOnly(params));
+    }
+    setView("logged");
+    setSignInOpen(false);
+    setError("");
+    setSuccess("Signed in. You can use My Account or browse the blog.");
+  };
+
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    const u = String(username).trim();
+    const p = String(password);
+    const em = String(email).trim();
+    if (!u || !p) {
+      setError("Username and password are required.");
+      return;
+    }
+    if (!isValidEmail(em)) {
+      setError("Enter a valid email address (e.g. you@example.com).");
+      return;
+    }
+    const opts = {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ username: "user", password: "password", email: "user@gmail.com" }),
-    })
-      .then((r) => r.text())
-      .then((text) => {
-        let data = {};
+      body: JSON.stringify({ username: u, password: p, email: em }),
+    };
+    const bases = [
+      [API_BASE, "Vite proxy → /api/lab2"],
+      [API_FALLBACK, "direct http://host:3001/api/lab2"],
+    ];
+    setLoading(true);
+    let lastError = "Could not reach the lab API.";
+    try {
+      for (let i = 0; i < bases.length; i++) {
+        const [base, label] = bases[i];
         try {
-          data = JSON.parse(text);
-        } catch (_) {}
-        const uid = data.success && data.user ? data.user.id : 5;
-        const uEmail = data.success && data.user ? (data.user.email || "user@gmail.com") : "user@gmail.com";
-        setUserId(uid);
-        setUserRole(data.success && data.user ? (data.user.role || "user") : "user");
-        setEmail(uEmail);
+          const res = await fetch(`${base}/login.php`, opts);
+          const text = await res.text();
+          const parsed = parseJsonLoginBody(text, res.status, label);
+          if (!parsed.ok) {
+            lastError = parsed.error;
+            continue;
+          }
+          const data = parsed.data;
+          if (data.success && data.user) {
+            applyLoginSuccess(data);
+            return;
+          }
+          const dbMsg = [data.message, data.detail].filter(Boolean).join(" — ");
+          setError(dbMsg || data.error || "Invalid username or password.");
+          return;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Network error";
+        }
+      }
+      setError(lastError);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        const params = new URLSearchParams(window.location.search);
-        const hasUserid = params.has("userid");
-        const hasProfile = params.has("profile");
-        if (hasUserid || hasProfile) {
-          setAccountUserid(hasUserid ? parseInt(params.get("userid"), 10) : uid);
-          setAccountEmail(params.get("email") || uEmail);
-          setView("logged");
-          setRoute(hasProfile ? "profile" : "account");
-        } else {
-          setAccountUserid(uid);
-          setAccountEmail(uEmail);
-          setView("logged");
-          setRoute("home");
-        }
-      })
-      .catch(() => {
-        const params = new URLSearchParams(window.location.search);
-        const hasUserid = params.has("userid");
-        const hasProfile = params.has("profile");
-        setUserId(5);
-        setAccountUserid(hasUserid ? parseInt(params.get("userid"), 10) : 5);
-        setAccountEmail(params.get("email") || "user@gmail.com");
-        setView("logged");
-        if (hasUserid || hasProfile) {
-          setRoute(hasProfile ? "profile" : "account");
-        } else {
-          setRoute("home");
-        }
-      });
-  }, [view]);
+  const handleDeleteAllDelegated = async () => {
+    if (!delegatedAdmins?.length || labSolveSentRef.current) return;
+    setDeleteAllLoading(true);
+    try {
+      labSolveSentRef.current = true;
+      const ok = await submitLabSolved();
+      if (ok) {
+        setDelegatedAdmins(null);
+      } else {
+        labSolveSentRef.current = false;
+      }
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (urlUserid) setAccountUserid(parseInt(urlUserid, 10));
-    if (urlEmail !== null) setAccountEmail(urlEmail || "");
-  }, [urlUserid, urlEmail]);
+    if (view !== "logged" || userId == null) return;
+    if (urlUserid) {
+      const id = parseInt(urlUserid, 10);
+      if (!Number.isNaN(id)) setAccountUserid(id);
+    } else {
+      setAccountUserid(userId);
+    }
+    if (urlEmail != null && urlEmail !== "") {
+      setAccountEmail(urlEmail);
+    } else {
+      setAccountEmail(email);
+    }
+  }, [urlUserid, urlEmail, view, userId, email]);
 
   useEffect(() => {
+    if (view !== "logged") return;
     if (profileUserid) setRoute("profile");
-    else if (urlUserid && view === "logged") setRoute("account");
+    else if (urlUserid) setRoute("account");
   }, [profileUserid, urlUserid, view]);
 
   useEffect(() => {
@@ -193,11 +503,20 @@ function Lab2App() {
       .then((d) => {
         if (d.success && d.user) {
           setProfile(d.user);
-          setUpdateEmailInput(d.user.email || "");
         }
       })
       .catch(console.error);
   }, [view, accountUserid, route]);
+
+  /** Update-email field: empty until you submit Update; then mirror `email` from URL only. */
+  useEffect(() => {
+    if (view !== "logged") return;
+    if (urlEmail != null && urlEmail !== "") {
+      setUpdateEmailInput(urlEmail);
+    } else if (!urlUserid && route === "account") {
+      setUpdateEmailInput("");
+    }
+  }, [urlEmail, urlUserid, view, route]);
 
   useEffect(() => {
     if (view === "logged" && route === "account" && accountUserid === 1) {
@@ -218,38 +537,107 @@ function Lab2App() {
     }
   }, [view, route, accountUserid]);
 
+  const displayUsers = useMemo(() => {
+    const base = users.length ? [...users] : [];
+    if (userId != null && !base.some((u) => u.id === userId)) {
+      base.push({
+        id: userId,
+        username: username || "—",
+        email: email || "",
+        role: userRole || "user",
+      });
+    }
+    return base.sort((a, b) => a.id - b.id);
+  }, [users, userId, username, email, userRole]);
+
   const handleUpdateEmail = (e) => {
     e.preventDefault();
+    if (view !== "logged") return;
     const uid = accountUserid ?? userId;
     if (!uid) return;
-    const emailVal = (updateEmailInput || "").trim() || "user@gmail.com";
+    const emailRaw = (updateEmailInput || "").trim();
+    if (!isValidEmail(emailRaw)) {
+      setError("Enter a valid email address (must look like name@domain.com).");
+      return;
+    }
     setError("");
-    setAccountEmail(emailVal);
-    setSearchParams({ userid: String(uid), email: emailVal });
+    setSuccess("");
+    setAccountEmail(emailRaw);
+    mergeSearchParams({ userid: String(uid), email: emailRaw });
+    setSuccess("Email updated.");
+
+    const adminRow = users.find((u) => u.id === 1);
+    const adminEmailFromApi =
+      adminRow && adminRow.email ? String(adminRow.email).trim().toLowerCase() : TARGET_ADMIN_EMAIL.toLowerCase();
+    const matchesAdmin =
+      emailRaw.toLowerCase() === adminEmailFromApi || emailRaw.toLowerCase() === TARGET_ADMIN_EMAIL.toLowerCase();
+
+    if (matchesAdmin && uid !== 1) {
+      labSolveSentRef.current = false;
+      setDelegatedAdmins(INITIAL_DELEGATED_ADMINS.map((r) => ({ ...r })));
+    }
   };
 
   const handleLogout = () => {
-    setView("loading");
-    setUsername("user");
+    try {
+      sessionStorage.removeItem(LAB2_SESSION_KEY);
+    } catch (_) {}
+    labSolveSentRef.current = false;
+    setDelegatedAdmins(null);
+    setView("guest");
+    setUsername("");
     setPassword("");
-    setEmail("user@gmail.com");
+    setEmail("");
     setUserId(null);
     setUserRole("user");
     setAccountUserid(null);
     setAccountEmail("");
     setProfile(null);
-    setSearchParams({});
+    setUpdateEmailInput("");
+    setError("");
+    setSuccess("");
+    setSearchParams(labOnlySearch());
     setRoute("home");
   };
 
-  const showAdminView = view === "logged" && route === "account" && accountUserid === 1;
+  const showDelegatedPanel =
+    view === "logged" &&
+    route === "account" &&
+    !profileUserid &&
+    Array.isArray(delegatedAdmins) &&
+    delegatedAdmins.length > 0;
+  const showAdminView =
+    view === "logged" && route === "account" && accountUserid === 1 && !showDelegatedPanel;
   const isAccountPage = route === "account" || route === "profile";
-  const hasSubmittedEmail = !!urlUserid && urlEmail !== null;
+  const hasSubmittedEmail = Boolean(
+    urlUserid && urlEmail != null && String(urlEmail).trim() !== ""
+  );
 
-  if (view === "loading") {
+  if (accessStatus === "checking") {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-gray-600 font-medium">Loading...</p>
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-2 border-emerald-600/30 border-t-emerald-600 rounded-full animate-spin mb-4" />
+          <p className="text-sm text-gray-500 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === "denied") {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border-2 border-red-200 bg-white p-8 text-center shadow-xl">
+          <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <X className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-sm text-gray-600">
+            Open this lab from HackMe using <strong>Start Lab</strong> so the URL includes{" "}
+            <code className="bg-gray-100 px-1 rounded text-xs">labId</code> and{" "}
+            <code className="bg-gray-100 px-1 rounded text-xs">token</code>.
+          </p>
+        </div>
       </div>
     );
   }
@@ -258,19 +646,185 @@ function Lab2App() {
     <div className="min-h-screen bg-white text-gray-900">
       <header className="border-b-2 border-gray-300 bg-white sticky top-0 z-10 shadow-md">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <Link to="/lab/2" onClick={() => setRoute("home")} className="text-lg font-bold text-gray-900 hover:text-emerald-700">
+          <Link
+            to={toLabPath()}
+            onClick={() => {
+              setRoute("home");
+              if (view === "logged") setSearchParams(labOnlySearch());
+            }}
+            className="text-lg font-bold text-gray-900 hover:text-emerald-700"
+          >
             Red & Blue Blog
           </Link>
           <nav className="flex items-center gap-3">
-            <Link to="/lab/2" onClick={() => { setRoute("account"); setSearchParams({}); }} className="inline-flex items-center gap-2 rounded-lg border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200">
-              <User className="w-4 h-4" /> My Account
-            </Link>
-            <button onClick={handleLogout} className="inline-flex items-center gap-1 rounded-lg border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800 hover:border-red-500">
-              Logout
-            </button>
+            {view === "guest" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSignInOpen(true);
+                  setError("");
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+              >
+                <LogIn className="w-4 h-4" /> Sign in
+              </button>
+            ) : (
+              <>
+                <Link
+                  to={toLabPath()}
+                  onClick={() => {
+                    setRoute("account");
+                    setAccountUserid(userId);
+                    setAccountEmail(email);
+                    setUpdateEmailInput("");
+                    setError("");
+                    setSuccess("");
+                    setSearchParams(labOnlySearch());
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200"
+                >
+                  <User className="w-4 h-4" /> My Account
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-1 rounded-lg border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800 hover:border-red-500"
+                >
+                  Logout
+                </button>
+              </>
+            )}
           </nav>
         </div>
       </header>
+
+      {signInOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border-2 border-gray-300 bg-white shadow-2xl p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center">
+                <Lock className="w-5 h-5 text-emerald-800" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-emerald-800 tracking-[0.18em] uppercase">Red & Blue Blog</p>
+                <h2 className="text-xl font-bold text-gray-900">Sign in</h2>
+              </div>
+            </div>
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1.5">Username</label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-gray-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    className="w-full rounded-lg bg-gray-100 border-2 border-gray-400 pl-9 pr-3 py-2.5 text-sm font-medium text-gray-900 outline-none focus:border-emerald-600"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="user"
+                    autoComplete="username"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1.5">Password</label>
+                <div className="relative">
+                  <Shield className="w-4 h-4 text-gray-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    className="w-full rounded-lg bg-gray-100 border-2 border-gray-400 pl-9 pr-3 py-2.5 text-sm font-medium text-gray-900 outline-none focus:border-emerald-600"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="password"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1.5">Email</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    className="w-full rounded-lg bg-gray-100 border-2 border-gray-400 pl-9 pr-3 py-2.5 text-sm font-medium text-gray-900 outline-none focus:border-emerald-600"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="user@gmail.com"
+                    autoComplete="email"
+                  />
+                </div>
+              </div>
+              {error && (
+                <div className="p-3 rounded-lg bg-red-100 border-2 border-red-500 text-red-900 text-sm font-semibold">{error}</div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSignInOpen(false);
+                    setError("");
+                  }}
+                  className="flex-1 rounded-lg border-2 border-gray-400 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {loading ? "Signing in…" : "Sign in"}
+                </button>
+              </div>
+            </form>
+            <p className="mt-4 text-xs text-gray-600">Default lab account: <span className="font-mono">user</span> / <span className="font-mono">password</span> / <span className="font-mono">user@gmail.com</span></p>
+          </div>
+        </div>
+      )}
+
+      {!urlPostId && showDelegatedPanel && (
+        <main className="max-w-5xl mx-auto px-6 py-10">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Shield className="w-6 h-6 text-amber-600" /> Administrator accounts
+          </h2>
+          <div className="rounded-xl border-2 border-gray-300 bg-gray-50 overflow-hidden mt-4">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-gray-400 bg-gray-200 text-left">
+                  <th className="py-3 px-4">Name</th>
+                  <th className="py-3 px-4">Username</th>
+                  <th className="py-3 px-4">Email</th>
+                  <th className="py-3 px-4">Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {delegatedAdmins.map((row) => (
+                  <tr key={row.id} className="border-b border-gray-300 hover:bg-gray-100">
+                    <td className="py-3 px-4 font-semibold">{row.fullName}</td>
+                    <td className="py-3 px-4">{row.username}</td>
+                    <td className="py-3 px-4">{row.email}</td>
+                    <td className="py-3 px-4">
+                      <span className="rounded-full border-2 border-amber-400 bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                        {row.role}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-6">
+            <button
+              type="button"
+              disabled={deleteAllLoading}
+              onClick={handleDeleteAllDelegated}
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-red-500 bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleteAllLoading ? "Submitting…" : "Delete all"}
+            </button>
+          </div>
+        </main>
+      )}
 
       {!urlPostId && showAdminView && isAccountPage && !profileUserid && (
         <main className="max-w-5xl mx-auto px-6 py-10">
@@ -278,7 +832,7 @@ function Lab2App() {
           <p className="text-sm text-gray-600 mb-4">Click a user to view their profile.</p>
           {usersError ? (
             <p className="text-red-600 py-4">Failed to load users. Ensure userid=1 is in the URL and the API is running.</p>
-          ) : users.length === 0 ? (
+          ) : displayUsers.length === 0 ? (
             <p className="text-gray-600 py-4">Loading users...</p>
           ) : (
             <div className="rounded-xl border-2 border-gray-300 bg-gray-50 overflow-hidden">
@@ -293,14 +847,27 @@ function Lab2App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} className="border-b border-gray-300 hover:bg-gray-100">
+                  {displayUsers.map((u) => (
+                    <tr
+                      key={u.id}
+                      className={`border-b border-gray-300 hover:bg-gray-100 ${
+                        userId != null && u.id === userId ? "bg-amber-50/80" : ""
+                      }`}
+                    >
                       <td className="py-3 px-4 font-medium">{u.id}</td>
                       <td className="py-3 px-4 font-semibold">{u.username}</td>
                       <td className="py-3 px-4">{u.email}</td>
                       <td className="py-3 px-4"><span className="rounded-full border-2 border-emerald-400 bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">{u.role}</span></td>
                       <td className="py-3 px-4">
-                        <Link to={`/lab/2?userid=1&email=${encodeURIComponent(accountEmail)}&profile=${u.id}`} onClick={() => setRoute("profile")} className="text-emerald-700 font-semibold hover:underline">
+                        <Link
+                          to={toLabPath({
+                            userid: "1",
+                            email: accountEmail || "",
+                            profile: String(u.id),
+                          })}
+                          onClick={() => setRoute("profile")}
+                          className="text-emerald-700 font-semibold hover:underline"
+                        >
                           View profile
                         </Link>
                       </td>
@@ -313,23 +880,34 @@ function Lab2App() {
         </main>
       )}
 
-      {!urlPostId && isAccountPage && !profileUserid && !showAdminView && (
+      {!urlPostId &&
+        view === "logged" &&
+        isAccountPage &&
+        !profileUserid &&
+        !showAdminView &&
+        !showDelegatedPanel && (
         <main className="max-w-2xl mx-auto px-6 py-10 space-y-6">
           <h2 className="text-xl font-bold text-gray-900">My Account</h2>
-          {!hasSubmittedEmail ? (
-            <p className="text-sm text-gray-600">Enter your email and click Update. Your <strong>userid</strong> and <strong>email</strong> will then appear in the URL.</p>
-          ) : (
-            <p className="text-xs text-gray-600">userid and email are in the URL. You can change the userid in the address bar to view other accounts.</p>
-          )}
           <form onSubmit={handleUpdateEmail} className="rounded-xl border-2 border-gray-300 bg-gray-50 p-5">
             <label className="block text-sm font-semibold text-gray-800 mb-2">Update email</label>
-            <div className="flex gap-2">
-              <input type="text" className="flex-1 rounded-lg bg-gray-100 border-2 border-gray-400 px-3 py-2 text-sm" value={updateEmailInput} onChange={(e) => setUpdateEmailInput(e.target.value)} placeholder="Enter your email" required />
-              <button type="submit" className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-bold text-white">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="email"
+                autoComplete="email"
+                className="flex-1 rounded-lg bg-gray-100 border-2 border-gray-400 px-3 py-2 text-sm"
+                value={updateEmailInput}
+                onChange={(e) => setUpdateEmailInput(e.target.value)}
+                placeholder="you@example.com"
+              />
+              <button type="submit" className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-bold text-white shrink-0">
                 Update
               </button>
             </div>
           </form>
+          {error && <div className="p-3 rounded-lg bg-red-100 border-2 border-red-500 text-red-900 text-sm font-semibold">{error}</div>}
+          {success && (
+            <div className="p-3 rounded-lg bg-green-100 border-2 border-green-500 text-green-900 text-sm font-semibold">{success}</div>
+          )}
           {hasSubmittedEmail && profile && (
             <>
               <div className="rounded-xl border-2 border-gray-300 bg-gray-50 p-5 space-y-2">
@@ -340,26 +918,28 @@ function Lab2App() {
                 <p className="text-xs font-semibold text-gray-700 mt-2">Email</p>
                 <p className="font-semibold">{profile.email || "—"}</p>
               </div>
-              {profile.flag && (
-                <div className="rounded-xl border-2 border-green-500 bg-green-100 p-5">
-                  <p className="text-xs font-semibold text-green-900 uppercase tracking-wider mb-2">Flag</p>
-                  <code className="text-lg font-bold text-green-900 select-all">{profile.flag}</code>
-                </div>
-              )}
             </>
           )}
-          {error && <div className="p-3 rounded-lg bg-red-100 border-2 border-red-500 text-red-900 text-sm font-semibold">{error}</div>}
-          {success && <div className="p-3 rounded-lg bg-green-100 border-2 border-green-500 text-green-900 text-sm font-semibold">{success}</div>}
         </main>
       )}
 
-      {!urlPostId && profileUserid && route === "profile" && (
-        <ProfileView userid={profileUserid} onBack={() => { setRoute("account"); setSearchParams({ userid: String(accountUserid ?? userId), email: accountEmail }); }} />
+      {!urlPostId && view === "logged" && profileUserid && route === "profile" && (
+        <ProfileView
+          userid={profileUserid}
+          onBack={() => {
+            setRoute("account");
+            const sp = new URLSearchParams(searchParams);
+            sp.delete("profile");
+            sp.set("userid", String(accountUserid ?? userId));
+            sp.set("email", accountEmail);
+            setSearchParams(sp);
+          }}
+        />
       )}
 
       {urlPostId && (
         <main className="max-w-3xl mx-auto px-6 py-10">
-          <Link to="/lab/2" className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 mb-6 inline-block">← Back to blog</Link>
+          <Link to={toLabPath()} className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 mb-6 inline-block">← Back to blog</Link>
           {currentPost ? (
             <article>
               <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">{currentPost.category}</span>
@@ -375,6 +955,11 @@ function Lab2App() {
 
       {route === "home" && !urlPostId && (
         <main className="max-w-5xl mx-auto px-6 py-10">
+          {view === "logged" && success ? (
+            <div className="mb-6 p-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 text-emerald-900 text-sm font-semibold">
+              {success}
+            </div>
+          ) : null}
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Red Team & Blue Team Blog</h1>
           <p className="text-gray-800 mb-10 font-medium">Blackbox, Whitebox, Graybox and more.</p>
           <div className="grid gap-8 md:grid-cols-2">
@@ -384,7 +969,7 @@ function Lab2App() {
                 <h2 className="text-xl font-bold text-gray-900 mt-1 mb-2">{blog.title}</h2>
                 <p className="text-gray-800 text-sm leading-relaxed line-clamp-2 font-medium">{blog.excerpt}</p>
                 <p className="text-xs text-gray-700 mt-3 font-medium">{blog.date} · {blog.minRead} min read</p>
-                <Link to={`/lab/2/post/${blog.id}`} className="mt-3 inline-block text-sm font-semibold text-emerald-700 hover:underline">
+                <Link to={postPath(blog.id)} className="mt-3 inline-block text-sm font-semibold text-emerald-700 hover:underline">
                   Read more
                 </Link>
               </article>
@@ -392,6 +977,56 @@ function Lab2App() {
           </div>
         </main>
       )}
+
+      {popup?.type === "solved" || popup?.type === "already_solved" ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-8 text-center">
+            <div
+              className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
+                popup.type === "solved" ? "bg-emerald-100" : "bg-amber-100"
+              }`}
+            >
+              <CheckCircle2
+                className={`w-10 h-10 ${
+                  popup.type === "solved" ? "text-emerald-600" : "text-amber-600"
+                }`}
+              />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {popup.type === "solved" ? "Lab solved!" : "Already solved"}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              {popup.type === "solved"
+                ? "Congratulations — the administrator list was cleared. Points are recorded in HackMe."
+                : "You already completed this lab. No additional points."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setPopup(null)}
+              className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 py-2.5 text-sm font-bold text-white"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {popup?.type === "flag_error" ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Could not record solve</h3>
+            <p className="text-sm text-red-700 mb-4">{popup.message}</p>
+            {popup.detail ? <p className="text-xs text-gray-500 mb-4">{popup.detail}</p> : null}
+            <button
+              type="button"
+              onClick={() => setPopup(null)}
+              className="w-full rounded-lg border-2 border-gray-300 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -443,12 +1078,6 @@ function ProfileView({ userid, onBack }) {
         <p className="text-xs font-semibold text-gray-700 mt-2">Email</p>
         <p className="font-semibold">{profile.email || "—"}</p>
       </div>
-      {profile.flag && (
-        <div className="rounded-xl border-2 border-green-500 bg-green-100 p-5">
-          <p className="text-xs font-semibold text-green-900 uppercase tracking-wider mb-2">Flag</p>
-          <code className="text-lg font-bold text-green-900 select-all">{profile.flag}</code>
-        </div>
-      )}
     </main>
   );
 }

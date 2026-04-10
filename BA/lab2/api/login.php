@@ -38,6 +38,17 @@ if ($username === 'user' && $password === 'password') {
 }
 
 $stmt = $conn->prepare("SELECT id, username, email, role FROM users WHERE username = ? AND password = ?");
+if (!$stmt) {
+    ob_clean();
+    http_response_code(500);
+    echo json_encode([
+        "success" => false,
+        "message" => "Database query failed (is security_lab_2 initialized?).",
+        "user" => null,
+        "detail" => $conn->error,
+    ]);
+    exit;
+}
 $stmt->bind_param("ss", $username, $password);
 $stmt->execute();
 $result = $stmt->get_result();

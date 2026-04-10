@@ -5,10 +5,21 @@ import {
   Shield,
   LogOut,
   UserCog,
+  CheckCircle2,
+  X,
+  Plus,
+  Pencil,
+  Trash2,
+  BookOpen,
 } from "lucide-react";
-import { reportLabObjective } from "./src/labProgress";
 
 const LAB_FLAG = "FLAG{UNPROTECTED_ADMIN_PANEL}";
+const HACKME_API_BASE =
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+
+function sameUsername(a, b) {
+  return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+}
 
 const API_URL = "http://localhost:3001";
 
@@ -159,6 +170,7 @@ function getViewFromHash() {
   const raw = (window.location.hash || "#/").replace(/^#\/?/, "") || "blog";
   if (raw === "admin-panel") return { route: "admin" };
   if (raw === "my-account") return { route: "account" };
+  if (raw === "blog-manage") return { route: "blog_manage" };
   if (raw.startsWith("blog/")) {
     const id = raw.slice(5).split("/")[0];
     return { route: "post", postId: id };
@@ -167,6 +179,18 @@ function getViewFromHash() {
 }
 
 const AccessControlLabApp = () => {
+  const [accessStatus, setAccessStatus] = useState("checking");
+  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [popup, setPopup] = useState(null);
+  const [blogs, setBlogs] = useState(() => BLOGS.map((b) => ({ ...b })));
+  const [blogModal, setBlogModal] = useState(null);
+  const [formTitle, setFormTitle] = useState("");
+  const [formExcerpt, setFormExcerpt] = useState("");
+  const [formCategory, setFormCategory] = useState("");
+  const [formDate, setFormDate] = useState("");
+  const [formMinRead, setFormMinRead] = useState(8);
+  const [formContent, setFormContent] = useState("");
+
   const [view, setView] = useState("login");
   const [route, setRoute] = useState("home");
   const [postId, setPostId] = useState(null);
@@ -180,6 +204,175 @@ const AccessControlLabApp = () => {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState(null);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const labId = params.get("labId");
+    const token = params.get("token");
+    if (!labId || !token) {
+      setAccessStatus("denied");
+      return;
+    }
+    (async () => {
+      try {
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const res = await fetch(url);
+        const data = await res.json().catch(() => ({}));
+        setAccessStatus(data.valid ? "granted" : "denied");
+        if (data.valid) {
+          setLabParams({
+            labId,
+            token,
+            userId: data.user_id > 0 ? data.user_id : null,
+          });
+        }
+      } catch {
+        setAccessStatus("denied");
+      }
+    })();
+  }, []);
+
+  const submitLabSolved = async () => {
+    const { labId, userId, token } = labParams;
+    if (!labId || !token) {
+      setPopup({
+        type: "flag_error",
+        message: "Missing lab session. Open this lab from HackMe (Start Lab).",
+        detail: "",
+      });
+      return false;
+    }
+    const payload = {
+      lab_id: Number(labId),
+      flag: LAB_FLAG,
+      user_id: userId > 0 ? userId : 0,
+      access_token: token,
+    };
+    try {
+      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        setPopup({
+          type: "flag_error",
+          message: "Invalid response from HackMe",
+          detail: raw.slice(0, 200),
+        });
+        return false;
+      }
+      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
+        const isFirstTime = data.message === "FLAG_CAPTURED";
+        const ptsForParent =
+          data.message === "FLAG_CAPTURED"
+            ? typeof data.points === "number"
+              ? data.points
+              : 150
+            : 0;
+        setPopup({ type: isFirstTime ? "solved" : "already_solved" });
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: "HACKME_LAB_SOLVED", labId: Number(labId), lab_id: Number(labId), points: ptsForParent },
+            "*"
+          );
+          window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
+        }
+        return true;
+      }
+      const errMsg = data.detail || data.message || `HackMe error (HTTP ${res.status})`;
+      setPopup({ type: "flag_error", message: errMsg, detail: data.message || "" });
+      return false;
+    } catch (e) {
+      setPopup({
+        type: "flag_error",
+        message: e instanceof Error ? e.message : "Network error — is HackMe running?",
+        detail: "",
+      });
+      return false;
+    }
+  };
+
+  const resetBlogForm = () => {
+    setFormTitle("");
+    setFormExcerpt("");
+    setFormCategory("");
+    setFormDate("");
+    setFormMinRead(8);
+    setFormContent("");
+  };
+
+  const openAddBlogModal = () => {
+    resetBlogForm();
+    setBlogModal({ mode: "add" });
+  };
+
+  const openEditBlogModal = (id) => {
+    const b = blogs.find((x) => x.id === id);
+    if (!b) return;
+    setFormTitle(b.title);
+    setFormExcerpt(b.excerpt);
+    setFormCategory(b.category);
+    setFormDate(b.date);
+    setFormMinRead(b.minRead);
+    setFormContent(b.content);
+    setBlogModal({ mode: "edit", id });
+  };
+
+  const saveBlogModal = (e) => {
+    e.preventDefault();
+    const title = formTitle.trim();
+    if (!title) return;
+    const excerpt = formExcerpt.trim() || "—";
+    const category = formCategory.trim() || "General";
+    const date = formDate.trim() || "—";
+    const minRead = Number(formMinRead) > 0 ? Number(formMinRead) : 8;
+    const content = formContent;
+
+    if (blogModal?.mode === "add") {
+      const newId = Math.max(0, ...blogs.map((b) => b.id)) + 1;
+      setBlogs((prev) => [...prev, { id: newId, title, excerpt, category, date, minRead, content }]);
+    } else if (blogModal?.mode === "edit" && blogModal.id != null) {
+      const id = blogModal.id;
+      setBlogs((prev) =>
+        prev.map((b) =>
+          b.id === id ? { ...b, title, excerpt, category, date, minRead, content } : b
+        )
+      );
+    }
+    setBlogModal(null);
+    resetBlogForm();
+  };
+
+  const handleDeleteBlog = async (id) => {
+    const blog = blogs.find((b) => b.id === id);
+    if (!blog) return;
+    if (!window.confirm(`Delete "${blog.title}"? This cannot be undone.`)) return;
+    setBlogs((prev) => prev.filter((b) => b.id !== id));
+    if (route === "post" && String(postId) === String(id)) {
+      navigate("blog");
+    }
+  };
+
+  const handleDeleteAllBlogs = async () => {
+    if (!blogs.length) return;
+    setDeleteAllLoading(true);
+    try {
+      const ok = await submitLabSolved();
+      if (!ok) return;
+      setBlogs([]);
+      if (route === "post" || route === "blog_manage") {
+        navigate("blog");
+      }
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  };
 
   const navigate = (path) => {
     const clean = (path || "").replace(/^#\/?/, "").replace(/\/$/, "") || "blog";
@@ -208,7 +401,6 @@ const AccessControlLabApp = () => {
       .then((data) => {
         if (data.success && Array.isArray(data.users)) {
           setAdminUsers(data.users);
-          reportLabObjective("access_control_admin", { username: username || "guest" });
         }
       })
       .catch(console.error)
@@ -261,7 +453,7 @@ const AccessControlLabApp = () => {
   };
 
   const handleLogout = async () => {
-    if (username && userRole === "admin") {
+    if (username && isAdmin) {
       try {
         await fetch(`${API_URL}/update_role.php`, {
           method: "POST",
@@ -293,14 +485,10 @@ const AccessControlLabApp = () => {
       const data = await res.json();
       if (data.success) {
         setAdminUsers((prev) =>
-          prev.map((u) => (u.username === targetUsername ? { ...u, role: newRole } : u))
+          prev.map((u) => (sameUsername(u.username, targetUsername) ? { ...u, role: newRole } : u))
         );
-        if (targetUsername === username) {
+        if (sameUsername(targetUsername, username)) {
           setUserRole(newRole);
-          if (newRole === "admin") {
-            setSuccess("You are now an admin.");
-            reportLabObjective("access_control_admin", { username: targetUsername });
-          }
         } else {
           setSuccess(`Role updated for ${targetUsername}.`);
         }
@@ -313,6 +501,35 @@ const AccessControlLabApp = () => {
       setRoleUpdating(null);
     }
   };
+
+  if (accessStatus === "checking") {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block w-12 h-12 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin mb-4" />
+          <p className="text-sm text-gray-500 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessStatus === "denied") {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border-2 border-red-200 bg-white p-8 text-center shadow-xl">
+          <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <X className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-sm text-gray-600">
+            Open this lab from HackMe using <strong>Start Lab</strong> so the URL includes{" "}
+            <code className="bg-gray-100 px-1 rounded text-xs">labId</code> and{" "}
+            <code className="bg-gray-100 px-1 rounded text-xs">token</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (view === "login") {
     return (
@@ -392,7 +609,110 @@ const AccessControlLabApp = () => {
     );
   }
 
-  const currentPost = postId ? BLOGS.find((b) => String(b.id) === String(postId)) : null;
+  const currentPost = postId ? blogs.find((b) => String(b.id) === String(postId)) : null;
+
+  /** Session role or row from admin list (covers trim/case mismatches). */
+  const isAdmin =
+    String(userRole).toLowerCase() === "admin" ||
+    adminUsers.some(
+      (u) => sameUsername(u.username, username) && String(u.role).toLowerCase() === "admin"
+    );
+
+  const blogAdminSection = isAdmin ? (
+    <section className="mb-10 rounded-xl border-2 border-blue-400 bg-blue-50/80 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <UserCog className="w-5 h-5 text-blue-600" />
+            Blog management
+          </h2>
+          <p className="text-sm text-gray-700 mt-1">
+            Add, edit, or remove individual posts. To complete the lab and earn points (same flow as SQL lab id 1), use{" "}
+            <strong>Delete all</strong> — it submits your solve to HackMe, then clears the list.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDeleteAllBlogs}
+            disabled={deleteAllLoading || !blogs.length}
+            className="inline-flex items-center gap-2 rounded-lg border-2 border-red-500 bg-red-50 hover:bg-red-100 px-4 py-2 text-sm font-bold text-red-800 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+            {deleteAllLoading ? "Submitting…" : "Delete all"}
+          </button>
+          <button
+            type="button"
+            onClick={openAddBlogModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white shadow"
+          >
+            <Plus className="w-4 h-4" />
+            New post
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-blue-200 bg-white">
+        <table className="min-w-full text-sm text-left">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700">
+              <th className="py-2 px-3">ID</th>
+              <th className="py-2 px-3">Title</th>
+              <th className="py-2 px-3">Category</th>
+              <th className="py-2 px-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {blogs.map((blog) => (
+              <tr key={blog.id} className="border-b border-gray-100 last:border-0">
+                <td className="py-2 px-3 font-mono text-gray-600">{blog.id}</td>
+                <td className="py-2 px-3 font-medium text-gray-900">{blog.title}</td>
+                <td className="py-2 px-3 text-gray-600">{blog.category}</td>
+                <td className="py-2 px-3 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => openEditBlogModal(blog.id)}
+                    className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50 mr-1"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBlog(blog.id)}
+                    className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-800 hover:bg-red-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  ) : null;
+
+  const blogManageLinkCard = isAdmin ? (
+    <div className="mb-8 rounded-xl border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-white p-5 shadow-md">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-base font-bold text-gray-900">Blog management</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Opens a dedicated page where you can add, edit, or delete posts. Complete the lab using <strong>Delete all</strong> on that page.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("blog-manage")}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition-colors"
+        >
+          <BookOpen className="w-4 h-4" />
+          Open blog management
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -405,7 +725,7 @@ const AccessControlLabApp = () => {
           >
             CyberSec Blog
           </a>
-          <nav className="flex items-center gap-3">
+          <nav className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
             <a
               href="#/my-account"
               onClick={(e) => { e.preventDefault(); navigate("my-account"); }}
@@ -428,8 +748,9 @@ const AccessControlLabApp = () => {
         <main className="max-w-5xl mx-auto px-6 py-10">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Cyber Security Blog</h1>
           <p className="text-gray-800 mb-10 font-medium">Articles on penetration testing, web security, and defense.</p>
+
           <div className="grid gap-8 md:grid-cols-2">
-            {BLOGS.map((blog) => (
+            {blogs.map((blog) => (
               <article
                 key={blog.id}
                 className="rounded-xl border-2 border-gray-300 bg-gray-50 p-6 hover:border-blue-400 hover:shadow-lg transition-all"
@@ -461,6 +782,26 @@ const AccessControlLabApp = () => {
           >
             ← Back to blog
           </a>
+          {isAdmin && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => openEditBlogModal(currentPost.id)}
+                className="inline-flex items-center gap-2 rounded-lg border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200"
+              >
+                <Pencil className="w-4 h-4" />
+                Edit post
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteBlog(currentPost.id)}
+                className="inline-flex items-center gap-2 rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 hover:bg-red-100"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete post
+              </button>
+            </div>
+          )}
           <article className="max-w-none">
             <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">{currentPost.category}</span>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mt-1 mb-3 tracking-tight">
@@ -490,8 +831,45 @@ const AccessControlLabApp = () => {
             <p className="text-xs font-semibold text-gray-700 mb-1">Username</p>
             <p className="font-semibold text-gray-900">{username}</p>
             <p className="text-xs font-semibold text-gray-700 mt-3 mb-1">Role</p>
-            <p className="font-semibold text-blue-800">{userRole}</p>
+            <p className="font-semibold text-blue-800">{isAdmin ? "admin" : userRole || "user"}</p>
           </div>
+        </main>
+      )}
+
+      {route === "blog_manage" && (
+        <main className="max-w-5xl mx-auto px-6 py-10">
+          <a
+            href="#/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("blog");
+            }}
+            className="text-sm font-semibold text-blue-700 hover:text-blue-900 mb-6 inline-block"
+          >
+            ← Back to blog home
+          </a>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Blog management</h1>
+          <p className="text-gray-600 text-sm mb-8">
+            Manage all posts here. Use <strong>Delete all</strong> to submit your lab completion to HackMe (same points as SQL lab id 1).
+          </p>
+          {isAdmin ? (
+            blogAdminSection
+          ) : (
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-6 text-amber-950">
+              <p className="font-semibold mb-2">Admin access required.</p>
+              <p className="text-sm mb-4">Open the admin panel, promote your account to admin, then return here.</p>
+              <a
+                href="#/admin-panel"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("admin-panel");
+                }}
+                className="inline-flex items-center gap-2 font-bold text-blue-700 hover:underline"
+              >
+                → Open admin panel
+              </a>
+            </div>
+          )}
         </main>
       )}
 
@@ -562,14 +940,142 @@ const AccessControlLabApp = () => {
             )}
           </section>
 
-          {userRole === "admin" && (
-            <div className="rounded-xl border-2 border-green-500 bg-green-100 p-5 mt-6">
-              <p className="text-xs font-semibold text-green-900 uppercase tracking-wider mb-2">Flag</p>
-              <code className="text-lg font-bold text-green-900 select-all">{LAB_FLAG}</code>
-            </div>
-          )}
+          {blogManageLinkCard}
         </main>
       )}
+
+      {blogModal && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white border-2 border-gray-300 shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              {blogModal.mode === "add" ? "New blog post" : "Edit blog post"}
+            </h3>
+            <form onSubmit={saveBlogModal} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Title</label>
+                <input
+                  className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Category</label>
+                <input
+                  className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm"
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Date</label>
+                  <input
+                    className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm"
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Min read</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm"
+                    value={formMinRead}
+                    onChange={(e) => setFormMinRead(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Excerpt</label>
+                <textarea
+                  className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm min-h-[60px]"
+                  value={formExcerpt}
+                  onChange={(e) => setFormExcerpt(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Content</label>
+                <textarea
+                  className="w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm min-h-[160px] font-mono"
+                  value={formContent}
+                  onChange={(e) => setFormContent(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBlogModal(null);
+                    resetBlogForm();
+                  }}
+                  className="rounded-lg border-2 border-gray-400 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {popup?.type === "solved" || popup?.type === "already_solved" ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-8 text-center">
+            <div
+              className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
+                popup.type === "solved" ? "bg-emerald-100" : "bg-amber-100"
+              }`}
+            >
+              <CheckCircle2
+                className={`w-10 h-10 ${
+                  popup.type === "solved" ? "text-emerald-600" : "text-amber-600"
+                }`}
+              />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {popup.type === "solved" ? "Lab solved!" : "Already solved"}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              {popup.type === "solved"
+                ? "Congratulations — the target post was removed. Points are recorded in HackMe."
+                : "You already completed this lab. No additional points."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setPopup(null)}
+              className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 py-2.5 text-sm font-bold text-white"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {popup?.type === "flag_error" ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Could not record solve</h3>
+            <p className="text-sm text-red-700 mb-4">{popup.message}</p>
+            {popup.detail ? <p className="text-xs text-gray-500 mb-4">{popup.detail}</p> : null}
+            <button
+              type="button"
+              onClick={() => setPopup(null)}
+              className="w-full rounded-lg border-2 border-gray-300 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

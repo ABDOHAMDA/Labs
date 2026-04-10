@@ -8,12 +8,18 @@ const HACKME_API_BASE =
 /**
  * Academy PHP API (docker-compose maps api:80 → host :3000).
  * Set VITE_ACADEMY_API_BASE in Lab/.env to override.
+ *
+ * In Vite dev, prefer same-origin `/academy` so requests use vite.config.js proxy (avoids
+ * wrong service on :3000 returning HTML → JSON.parse fails with "Invalid response from server").
  */
 function getAcademyApiBase() {
   if (import.meta.env.VITE_ACADEMY_API_BASE) {
     return String(import.meta.env.VITE_ACADEMY_API_BASE).replace(/\/$/, "");
   }
   if (typeof window === "undefined") return "http://127.0.0.1:3000/academy";
+  if (import.meta.env.DEV) {
+    return `${window.location.origin}/academy`;
+  }
   const host = window.location.hostname || "127.0.0.1";
   return `http://${host}:3000/academy`;
 }
@@ -26,11 +32,16 @@ function getAcademyApiBaseList() {
     list.push(String(import.meta.env.VITE_ACADEMY_API_BASE).replace(/\/$/, ""));
   }
   if (typeof window !== "undefined") {
+    if (import.meta.env.DEV) {
+      list.push(`${window.location.origin}/academy`);
+    }
     const h = window.location.hostname || "127.0.0.1";
     list.push(`http://${h}:3000/academy`);
     list.push("http://127.0.0.1:3000/academy");
     list.push("http://localhost:3000/academy");
-    list.push(`${window.location.origin}/academy`);
+    if (!import.meta.env.DEV) {
+      list.push(`${window.location.origin}/academy`);
+    }
   } else {
     list.push("http://127.0.0.1:3000/academy");
   }
@@ -393,12 +404,18 @@ const AcademyLabApp = () => {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ user_name: userName, password }),
       });
-      const text = await res.text();
+      const raw = await res.text();
+      const text = raw.replace(/^\uFEFF/, "").trim();
       let data;
       try {
         data = JSON.parse(text);
       } catch {
-        setError("Invalid response from server.");
+        const preview = text.replace(/\s+/g, " ").slice(0, 160);
+        setError(
+          preview
+            ? `Invalid response from server (${res.status}): ${preview}${text.length > 160 ? "…" : ""}`
+            : `Invalid response from server (empty body, HTTP ${res.status}). Is the PHP API running?`
+        );
         setLoading(false);
         return;
       }
