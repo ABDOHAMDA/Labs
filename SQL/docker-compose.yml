@@ -4,6 +4,8 @@ services:
       context: ./Lab
       dockerfile: Dockerfile
     container_name: sql_lab_web
+    environment:
+      VITE_API_PROXY_TARGET: http://api:80
     ports:
       - "4000:5173"
     volumes:
@@ -37,7 +39,7 @@ services:
       MYSQL_ROOT_PASSWORD: root_pass
     volumes:
       - db_data:/var/lib/mysql
-      - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql
+      - ./db-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass"]
       interval: 5s
