@@ -1,0 +1,21 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frogger_devtools_lab_web
+    ports:
+      - "4010:5173"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+
+  config-api:
+    image: node:20-alpine
+    container_name: frogger_devtools_lab_api
+    working_dir: /srv
+    command: ["node", "server.js"]
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config-api:/srv
