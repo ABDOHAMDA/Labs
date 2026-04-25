@@ -1,0 +1,20 @@
+services:
+  main-platform:
+    build:
+      context: ./main-platform
+      dockerfile: Dockerfile
+    container_name: cyber_main_platform
+    ports:
+      - "4000:4000"
+
+  lab-service:
+    build:
+      context: ./lab-service
+      dockerfile: Dockerfile
+    container_name: cyber_lab_service
+    environment:
+      - MAIN_PLATFORM_EVENTS_URL=http://main-platform:4000/api/events
+    depends_on:
+      - main-platform
+    ports:
+      - "5000:5000"
