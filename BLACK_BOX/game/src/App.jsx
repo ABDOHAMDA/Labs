@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 const LAB_FLAG = "FLAG{FROGGER_DEVTOOLS_OVERRIDE}";
 const HACKME_API_BASE =
   window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+const LAB_POINTS = 300;
 
 const GAME = {
   width: 680,
@@ -40,16 +41,14 @@ function overlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function SuccessModal({ level, onNext }) {
+function SuccessModal({ onFinish, points }) {
   return (
     <div className="overlay">
       <div className="modal">
         <h3>Lab Solved!</h3>
-        <p>You successfully hacked the system.</p>
-        <div className="points">+150 Points</div>
-        <button type="button" onClick={onNext}>
-          {level === 3 ? "Next Level" : "Finish"}
-        </button>
+        <p>You successfully hacked the game runtime constraints.</p>
+        <div className="points">+{points} Points</div>
+        <button type="button" onClick={onFinish}>Finish</button>
       </div>
     </div>
   );
@@ -59,9 +58,8 @@ export default function App() {
   const [accessState, setAccessState] = useState("checking");
   const [labSession, setLabSession] = useState({ labId: null, token: null, userId: null });
 
-  const [level, setLevel] = useState(3);
-  const [score, setScore] = useState(0);
   const [showModal, setShowModal] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(LAB_POINTS);
   const [speed, setSpeed] = useState(10);
   const [player, setPlayer] = useState(startPos);
   const [cars, setCars] = useState(() => createCars(10));
@@ -70,10 +68,8 @@ export default function App() {
 
   const hint = useMemo(
     () =>
-      level === 3
-        ? "The game settings are not stored locally. Observe how data is loaded."
-        : "The browser may store useful data. Check what is saved.",
-    [level]
+      "Car speed is fetched from an API. Use DevTools to override the response and reduce carSpeed to 1.",
+    []
   );
 
   useEffect(() => {
@@ -103,24 +99,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (level === 3) {
-      fetch("http://localhost:5000/api/game-config", { cache: "no-store" })
-        .then((res) => res.json())
-        .then((data) => {
-          const value = Number(data?.carSpeed);
-          setSpeed(Number.isFinite(value) ? value : 10);
-        })
-        .catch(() => setSpeed(10));
-      return;
-    }
-    let value = localStorage.getItem("gameSpeed");
-    if (!value) {
-      localStorage.setItem("gameSpeed", "10");
-      value = "10";
-    }
-    const parsed = Number(value);
-    setSpeed(Number.isFinite(parsed) ? parsed : 10);
-  }, [level]);
+    fetch("http://localhost:5000/api/game-config", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        const value = Number(data?.carSpeed);
+        setSpeed(Number.isFinite(value) ? value : 10);
+      })
+      .catch(() => setSpeed(10));
+  }, []);
 
   useEffect(() => {
     setPlayer(startPos);
@@ -173,7 +159,6 @@ export default function App() {
     }
     if (player.y <= 0) {
       setShowModal(true);
-      setScore((prev) => prev + 150);
       setPlayer(startPos);
     }
   }, [cars, player]);
@@ -194,7 +179,13 @@ export default function App() {
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      const points = data?.message === "FLAG_CAPTURED" ? Number(data?.points ?? 150) : 0;
+      const points =
+        data?.message === "FLAG_CAPTURED"
+          ? Number(data?.points ?? LAB_POINTS)
+          : 0;
+      if (Number.isFinite(points) && points > 0) {
+        setEarnedPoints(points);
+      }
       if (window.opener) {
         window.opener.postMessage({ type: "HACKME_LAB_SOLVED", labId: Number(labId), points }, "*");
         window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
@@ -202,14 +193,10 @@ export default function App() {
     } catch (_) {}
   };
 
-  const onModalAction = async () => {
+  const onFinish = async () => {
     setShowModal(false);
-    if (level === 3) {
-      setLevel(4);
-      setResetKey((v) => v + 1);
-      return;
-    }
     await submitSolved();
+    setResetKey((v) => v + 1);
   };
 
   if (accessState === "checking") return <div className="status">Loading...</div>;
@@ -224,8 +211,7 @@ export default function App() {
   return (
     <div className="page">
       <header className="top">
-        <h1>Frogger Cyber Lab - Level {level}</h1>
-        <div className="score">Score: {score}</div>
+        <h1>Frogger Cyber Lab</h1>
       </header>
 
       <main className="game" style={{ width: GAME.width, height: GAME.height }}>
@@ -251,7 +237,7 @@ export default function App() {
         <strong>Hint:</strong> {hint}
       </aside>
 
-      {showModal && <SuccessModal level={level} onNext={onModalAction} />}
+      {showModal && <SuccessModal points={earnedPoints} onFinish={onFinish} />}
     </div>
   );
 }
