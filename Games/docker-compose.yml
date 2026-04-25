@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    container_name: games_web
+    ports:
+      - "4005:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - games_network
+
+networks:
+  games_network:
+    driver: bridge
+
