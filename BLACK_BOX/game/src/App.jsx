@@ -60,6 +60,7 @@ export default function App() {
 
   const [showModal, setShowModal] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(LAB_POINTS);
+  const [submittingSolve, setSubmittingSolve] = useState(false);
   const [speed, setSpeed] = useState(10);
   const [player, setPlayer] = useState(startPos);
   const [cars, setCars] = useState(() => createCars(10));
@@ -158,14 +159,17 @@ export default function App() {
       return;
     }
     if (player.y <= 0) {
-      setShowModal(true);
+      // Prevent multiple triggers while we're submitting solve.
+      if (!submittingSolve) {
+        setSubmittingSolve(true);
+      }
       setPlayer(startPos);
     }
-  }, [cars, player]);
+  }, [cars, player, submittingSolve]);
 
   const submitSolved = async () => {
     const { labId, token, userId } = labSession;
-    if (!labId || !token) return;
+    if (!labId || !token) return { points: 0 };
     const payload = {
       lab_id: Number(labId),
       flag: LAB_FLAG,
@@ -190,7 +194,10 @@ export default function App() {
         window.opener.postMessage({ type: "HACKME_LAB_SOLVED", labId: Number(labId), points }, "*");
         window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
       }
-    } catch (_) {}
+      return { points };
+    } catch (_) {
+      return { points: 0 };
+    }
   };
 
   const onFinish = async () => {
@@ -198,6 +205,27 @@ export default function App() {
     await submitSolved();
     setResetKey((v) => v + 1);
   };
+
+  // Auto-submit solve and close the tab when player wins.
+  useEffect(() => {
+    if (!submittingSolve) return;
+    let closed = false;
+    (async () => {
+      await submitSolved();
+      setShowModal(true);
+      // Give HackMe time to receive postMessage and show toast.
+      setTimeout(() => {
+        if (closed) return;
+        closed = true;
+        try {
+          window.close();
+        } catch (_) {}
+      }, 1400);
+    })();
+    return () => {
+      closed = true;
+    };
+  }, [submittingSolve]);
 
   if (accessState === "checking") return <div className="status">Loading...</div>;
   if (accessState === "denied") {
