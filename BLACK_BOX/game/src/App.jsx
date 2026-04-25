@@ -1,84 +1,45 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import GameHud from "./components/GameHud";
+import ResultModal from "./components/ResultModal";
+import { GAME } from "./game/constants";
+import { useFroggerEngine } from "./game/useFroggerEngine";
 
 const LAB_FLAG = "FLAG{FROGGER_DEVTOOLS_OVERRIDE}";
 const HACKME_API_BASE =
   window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
 const LAB_POINTS = 300;
 
-const GAME = {
-  width: 680,
-  height: 420,
-  laneHeight: 56,
-  lanes: 6,
-  playerSize: 26,
-};
-
-const startPos = {
-  x: GAME.width / 2 - GAME.playerSize / 2,
-  y: GAME.height - GAME.playerSize - 12,
-};
-
-function createCars(speed) {
-  const cars = [];
-  for (let lane = 0; lane < GAME.lanes; lane += 1) {
-    for (let i = 0; i < 4; i += 1) {
-      cars.push({
-        id: `${lane}-${i}`,
-        lane,
-        x: 50 + i * 190,
-        y: lane * GAME.laneHeight + 10,
-        w: 160,
-        h: 34,
-        dir: lane % 2 === 0 ? 1 : -1,
-        speed,
-      });
-    }
-  }
-  return cars;
-}
-
-function overlap(a, b) {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-}
-
-function SuccessModal({ onFinish, points }) {
-  return (
-    <div className="overlay">
-      <div className="modal">
-        <h3>Lab Solved!</h3>
-        <p>You successfully hacked the game runtime constraints.</p>
-        <div className="points">+{points} Points</div>
-        <button type="button" onClick={onFinish}>Finish</button>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [accessState, setAccessState] = useState("checking");
   const [labSession, setLabSession] = useState({ labId: null, token: null, userId: null });
 
-  const [showModal, setShowModal] = useState(false);
-  const [earnedPoints, setEarnedPoints] = useState(LAB_POINTS);
   const [submittingSolve, setSubmittingSolve] = useState(false);
+  const [resultState, setResultState] = useState({ open: false, title: "", message: "", points: 0 });
   const [speed, setSpeed] = useState(10);
-  const [player, setPlayer] = useState(startPos);
-  const [cars, setCars] = useState(() => createCars(10));
-  const [resetKey, setResetKey] = useState(0);
-  const rafRef = useRef(null);
+  const handleWin = useCallback(() => {
+    setSubmittingSolve((prev) => (prev ? prev : true));
+  }, []);
+  const { canvasRef, hud } = useFroggerEngine({
+    speedMultiplier: speed,
+    onWin: handleWin,
+    enabled: accessState === "granted",
+  });
 
-  const hint = useMemo(
-    () =>
-      "Car speed is fetched from an API. Use DevTools to override the response and reduce carSpeed to 1.",
-    []
-  );
+  const isLocalPreviewHost =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const labId = params.get("labId");
     const token = params.get("token");
     if (!labId || !token) {
-      setAccessState("denied");
+      if (isLocalPreviewHost) {
+        // Keep frontend visible in local dev even without HackMe launch params.
+        setAccessState("granted");
+        setLabSession({ labId: null, token: null, userId: 0 });
+      } else {
+        setAccessState("denied");
+      }
       return;
     }
     const check = async () => {
@@ -90,86 +51,52 @@ export default function App() {
           setAccessState("granted");
           setLabSession({ labId, token, userId: data.user_id ?? 0 });
         } else {
-          setAccessState("denied");
+          if (isLocalPreviewHost) {
+            setAccessState("granted");
+            setLabSession({ labId, token, userId: data.user_id ?? 0 });
+          } else {
+            setAccessState("denied");
+          }
         }
       } catch (_) {
-        setAccessState("denied");
+        if (isLocalPreviewHost) {
+          setAccessState("granted");
+          setLabSession({ labId, token, userId: 0 });
+        } else {
+          setAccessState("denied");
+        }
       }
     };
     check();
-  }, []);
+  }, [isLocalPreviewHost]);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/game-config", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
-        const value = Number(data?.carSpeed);
-        setSpeed(Number.isFinite(value) ? value : 10);
+        const apiSpeed = Number(data?.carSpeed);
+        const localRaw = window.localStorage.getItem("froggerCarSpeed");
+        const localSpeed = Number(localRaw);
+        const value = Number.isFinite(apiSpeed) ? apiSpeed : Number.isFinite(localSpeed) ? localSpeed : 10;
+        setSpeed(value);
       })
-      .catch(() => setSpeed(10));
-  }, []);
-
-  useEffect(() => {
-    setPlayer(startPos);
-    setCars(createCars(speed));
-  }, [speed, resetKey]);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      const key = e.key.toLowerCase();
-      const step = 22;
-      setPlayer((prev) => {
-        let nextX = prev.x;
-        let nextY = prev.y;
-        if (key === "arrowleft" || key === "a") nextX -= step;
-        if (key === "arrowright" || key === "d") nextX += step;
-        if (key === "arrowup" || key === "w") nextY -= step;
-        if (key === "arrowdown" || key === "s") nextY += step;
-        return {
-          x: Math.max(0, Math.min(nextX, GAME.width - GAME.playerSize)),
-          y: Math.max(0, Math.min(nextY, GAME.height - GAME.playerSize)),
-        };
+      .catch(() => {
+        const localRaw = window.localStorage.getItem("froggerCarSpeed");
+        const localSpeed = Number(localRaw);
+        setSpeed(Number.isFinite(localSpeed) ? localSpeed : 10);
       });
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  useEffect(() => {
-    const tick = () => {
-      setCars((prev) =>
-        prev.map((car) => {
-          let next = car.x + car.speed * car.dir;
-          if (car.dir > 0 && next > GAME.width + car.w) next = -car.w;
-          if (car.dir < 0 && next < -car.w) next = GAME.width + car.w;
-          return { ...car, x: next };
-        })
-      );
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
-
-  useEffect(() => {
-    const box = { x: player.x, y: player.y, w: GAME.playerSize, h: GAME.playerSize };
-    const collided = cars.some((car) => overlap(box, { x: car.x, y: car.y, w: car.w, h: car.h }));
-    if (collided) {
-      setPlayer(startPos);
-      return;
-    }
-    if (player.y <= 0) {
-      // Prevent multiple triggers while we're submitting solve.
-      if (!submittingSolve) {
-        setSubmittingSolve(true);
-      }
-      setPlayer(startPos);
-    }
-  }, [cars, player, submittingSolve]);
 
   const submitSolved = async () => {
     const { labId, token, userId } = labSession;
-    if (!labId || !token) return { points: 0 };
+    if (!labId || !token) {
+      return {
+        ok: false,
+        solved: false,
+        points: 0,
+        message: "Missing lab session. Open this lab from HackMe (Start Lab).",
+      };
+    }
     const payload = {
       lab_id: Number(labId),
       flag: LAB_FLAG,
@@ -182,49 +109,76 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
-      const points =
-        data?.message === "FLAG_CAPTURED"
-          ? Number(data?.points ?? LAB_POINTS)
-          : 0;
-      if (Number.isFinite(points) && points > 0) {
-        setEarnedPoints(points);
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        return {
+          ok: false,
+          solved: false,
+          points: 0,
+          message: "Invalid response from HackMe.",
+        };
       }
+
+      const message = data?.message;
+      const accepted =
+        Boolean(data?.success) ||
+        message === "FLAG_CAPTURED" ||
+        message === "LAB_ALREADY_SOLVED" ||
+        message === "FLAG_ALREADY_SUBMITTED";
+      if (!accepted) {
+        return {
+          ok: false,
+          solved: false,
+          points: 0,
+          message: data?.detail || message || `HackMe error (HTTP ${res.status})`,
+        };
+      }
+
+      const isFirstTime = message === "FLAG_CAPTURED";
+      const points = isFirstTime ? Number(data?.points ?? LAB_POINTS) : 0;
+      const safePoints = Number.isFinite(points) && points > 0 ? points : 0;
+
       if (window.opener) {
-        window.opener.postMessage({ type: "HACKME_LAB_SOLVED", labId: Number(labId), points }, "*");
+        window.opener.postMessage(
+          { type: "HACKME_LAB_SOLVED", labId: Number(labId), lab_id: Number(labId), points: safePoints },
+          "*"
+        );
         window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
       }
-      return { points };
-    } catch (_) {
-      return { points: 0 };
-    }
-  };
 
-  const onFinish = async () => {
-    setShowModal(false);
-    await submitSolved();
-    setResetKey((v) => v + 1);
+      return {
+        ok: true,
+        solved: true,
+        points: safePoints,
+        alreadySolved: !isFirstTime,
+        message: isFirstTime ? "The lab has been solved successfully." : "You've solved this lab before. No additional points awarded.",
+      };
+    } catch (_) {
+      return {
+        ok: false,
+        solved: false,
+        points: 0,
+        message: "Network error while contacting HackMe API.",
+      };
+    }
   };
 
   // Auto-submit solve and close the tab when player wins.
   useEffect(() => {
     if (!submittingSolve) return;
-    let closed = false;
     (async () => {
-      await submitSolved();
-      setShowModal(true);
-      // Give HackMe time to receive postMessage and show toast.
-      setTimeout(() => {
-        if (closed) return;
-        closed = true;
-        try {
-          window.close();
-        } catch (_) {}
-      }, 1400);
+      const result = await submitSolved();
+      setResultState({
+        open: true,
+        title: result.ok ? "Lab Solved" : "Submission Failed",
+        message: result.message,
+        points: result.points,
+      });
+      setSubmittingSolve(false);
     })();
-    return () => {
-      closed = true;
-    };
   }, [submittingSolve]);
 
   if (accessState === "checking") return <div className="status">Loading...</div>;
@@ -240,32 +194,26 @@ export default function App() {
     <div className="page">
       <header className="top">
         <h1>Frogger Cyber Lab</h1>
+        <p>
+          Your goal is to cross the road safely. To make crossing possible, use DevTools to modify the
+          runtime game configuration.
+        </p>
       </header>
 
-      <main className="game" style={{ width: GAME.width, height: GAME.height }}>
-        {Array.from({ length: GAME.lanes }, (_, lane) => (
-          <div
-            key={`lane-${lane}`}
-            className="lane"
-            style={{ top: lane * GAME.laneHeight, height: GAME.laneHeight }}
-          />
-        ))}
-        <div className="goal" />
-        {cars.map((car) => (
-          <div
-            key={car.id}
-            className="car"
-            style={{ left: car.x, top: car.y, width: car.w, height: car.h }}
-          />
-        ))}
-        <div className="player" style={{ left: player.x, top: player.y }} />
+      <GameHud level={hud.level} score={hud.score} lives={hud.lives} fps={hud.fps} />
+
+      <main className="game" style={{ width: GAME.width, height: GAME.height }} aria-label="Frogger game canvas">
+        <canvas ref={canvasRef} className="gameCanvas" />
       </main>
 
-      <aside className="hint">
-        <strong>Hint:</strong> {hint}
-      </aside>
-
-      {showModal && <SuccessModal points={earnedPoints} onFinish={onFinish} />}
+      {resultState.open && (
+        <ResultModal
+          title={resultState.title}
+          message={resultState.message}
+          points={resultState.points}
+          onClose={() => setResultState({ open: false, title: "", message: "", points: 0 })}
+        />
+      )}
     </div>
   );
 }
