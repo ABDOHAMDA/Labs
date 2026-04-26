@@ -42,6 +42,27 @@ body {
   color: #b7c0dc;
 }
 
+.discover-hint {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #7d8ab8;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(6, 12, 30, 0.65);
+  border: 1px solid rgba(160, 180, 255, 0.2);
+  border-radius: 10px;
+}
+.discover-hint code {
+  color: #9fc8ff;
+  font-size: 0.9em;
+}
+.discover-hint .nowrap {
+  display: inline-block;
+  max-width: 100%;
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
@@ -107,6 +128,173 @@ button:disabled {
 .success {
   text-align: center;
   border-color: rgba(73, 233, 172, 0.45);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 1.5rem;
+}
+
+.head-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 1rem 1.5rem 0;
+  font-size: 0.85rem;
+  width: min(760px, 100%);
+  align-self: stretch;
+  margin: 0 auto;
+}
+
+.lab-id {
+  color: #67d8ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab-badge {
+  background: rgba(13, 110, 53, 0.35);
+  color: #3bf57c;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 245, 124, 0.45);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.lab-diff {
+  color: #e8c24a;
+  font-size: 0.85rem;
+}
+
+.solved-card {
+  width: min(640px, 100%);
+  background: linear-gradient(145deg, #12182b 0%, #0b1020 100%);
+  border: 1px solid #2ea043;
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem 1.5rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(35, 134, 54, 0.2), 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+.solved-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #238636, #3fb950, #2ea043);
+}
+.pop-in {
+  animation: pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.solved-ribbon {
+  color: #3bf57c;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+}
+.solved-h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.35rem;
+  color: #e7eaf3;
+}
+.solved-sub {
+  color: #b7c0dc;
+  margin: 0 0 1rem;
+  font-size: 1rem;
+}
+.method-row {
+  color: #dce5ff;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+.method-row strong {
+  color: #7ab8ff;
+}
+.points-line {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #3bf57c;
+  margin: 0.4rem 0;
+}
+.total-line {
+  font-size: 1.05rem;
+  color: #e7eaf3;
+  font-variant-numeric: tabular-nums;
+  margin: 0.5rem 0 0.25rem;
+}
+.lab-meta-tiny {
+  color: #8a96b8;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.solved-actions {
+  margin-top: 0.5rem;
+}
+.next-lab {
+  background: linear-gradient(180deg, #2ea043 0%, #238636 100%) !important;
+  border: 1px solid #3fb950;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.55rem 1.4rem;
+  box-shadow: 0 2px 8px rgba(46, 160, 67, 0.35);
+}
+.hackme-line {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  text-align: left;
+}
+.hackme-line.ok {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+.hackme-line.warn {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.hackme-line.muted {
+  color: #9ca3af;
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px solid rgba(156, 163, 175, 0.25);
+}
+
+.solved-note {
+  font-size: 0.75rem;
+  color: #6e7a9e;
+  margin: 0.6rem 0 1rem;
+}
+.reset-outline {
+  background: transparent !important;
+  color: #9fb4ff;
+  border: 1px solid rgba(160, 180, 255, 0.4);
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+.reset-outline:hover {
+  border-color: #67d8ff;
+  color: #fff;
 }
 
 @keyframes fadeUp {

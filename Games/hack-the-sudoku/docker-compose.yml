@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -13,10 +11,11 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         VITE_API_BASE: "http://backend:8080"
+        VITE_HACKME_BASE: "http://localhost/HackMe"
     container_name: hack-the-sudoku-web
     ports:
       - "4011:80"

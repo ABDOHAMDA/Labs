@@ -7,20 +7,40 @@ Your objective is to **hack the game**, not solve Sudoku mathematically.
 
 ## Stack
 
-- Frontend: React + Vite
-- Backend: .NET 8 Minimal Web API
-- Database: none (in-memory style behavior)
+- Frontend: React + Vite (imports shared `labSystem` via the `@lab` alias)
+- Optional backend: whatever you expose for `/api/validate` / hints (not required to complete the lab)
+- Lab persistence: `localStorage` only (for training realism)
 - Containerization: Docker + Docker Compose
 
 ## Project Structure
 
 ```text
 hack-the-sudoku/
-  frontend/
-  backend/
+  labSystem/     # shared lab config, scoring, progress, HackMe client (imported as @lab in Vite)
+  frontend/      # React + Vite; `public/js/labApp.js` is the visible `winGame` module
+  backend/       # optional Node mock API for Docker
   docker-compose.yml
   README.md
 ```
+
+## Lab platform (client-side, intentionally weak)
+
+When the **exploit** succeeds (not normal Sudoku completion), the app:
+
+- Sets `localStorage` keys, including `lab_sudoku_solved` = `"true"`, and on first clear `score_sudoku` = `"100"`.
+- Updates `totalScore` (sum-style running total; extend with more `score_*` keys in other labs).
+- Blocks duplicate point awards: console logs **Duplicate reward prevented** (open DevTools) if a repeat is attempted.
+- After refresh, the solved panel stays and points are not re-awarded.
+### HackMe integration (authoritative score + leaderboard)
+
+When a student uses **Start Lab** in the HackMe app, the browser opens the game with a URL like:
+
+`http://localhost:4011/?labId=40&token=…`
+
+The lab calls HackMe’s **`POST …/server/api/labs/lab_solved.php`** with `{ "lab_id": 40, "token": "…" }` right after the first local exploit success. That is the same flow as other external labs: points and submissions go through the main platform (see `lab_completion_helper.php`).
+
+- If there is **no** `token` in the query string (e.g. opening the game directly), local scoring still works, but the success panel tells the user to start from HackMe to sync the account.
+- **Vite / Docker build:** set `VITE_HACKME_BASE` to your HackMe origin (default `http://localhost/HackMe`). Static pages can set `window.__HACKME_BASE__` to override the base URL.
 
 ## Run with Docker
 
@@ -30,10 +50,11 @@ From `hack-the-sudoku`:
 docker compose up --build
 ```
 
-Then open:
+Then open the web UI (Compose maps the container to **port 4011**):
 
-- Frontend: [http://localhost:5173](http://localhost:5173)
-- Backend API: [http://localhost:8080](http://localhost:8080)
+- **http://localhost:4011**
+
+`docker-compose.yml` also defines a `backend` service (port 8080) for hints/validation; wire your own API to match, or use the app without it for pure client-only training.
 
 ## API Endpoints
 
@@ -77,7 +98,7 @@ Possible win paths include:
 
 When exploited correctly, the app shows:
 
-`You did not solve Sudoku... you exploited it.`
+`You didn’t solve Sudoku… you exploited it.`
 
 ---
 

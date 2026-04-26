@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SUDOKU_LAB_CONFIG } from "@lab/labConfig.js";
+import { formatHackmeSummary, readStoredHackMeResult } from "@lab/hackmeClient.js";
+import { returnToHackMeFromLab } from "@lab/navHackMe.js";
+import { getTotalScore, resetSudokuLabForReplay } from "@lab/scoring.js";
+import { recordSolve } from "@lab/useLabProgress.js";
+import "./App.css";
 
 const SIZE = 9;
 const CELL_COUNT = SIZE * SIZE;
 const STORAGE_GRID_KEY = "sudokuGrid";
 const STORAGE_SOLVED_KEY = "sudokuSolved";
 const STORAGE_BYPASS_KEY = "bypassAntiCheat";
-const SECRET_B64 = "VGhlIHNvbHV0aW9uIGlzIG5vdCBpbiB0aGUgZ3JpZC4gV2luIGJ5IGNoYW5naW5nIHRydXN0Lg==";
 
 const seedGrid = [
   "", "", "", "2", "6", "", "7", "", "1",
@@ -19,12 +24,6 @@ const seedGrid = [
   "7", "", "3", "", "1", "8", "", "", ""
 ];
 
-const fakeSignals = {
-  gridIntegrityScore: 100,
-  quantumChecksum: "sudoku-safe-v1",
-  fraudMonitorEnabled: true
-};
-
 function readInitialGrid() {
   try {
     const raw = localStorage.getItem(STORAGE_GRID_KEY);
@@ -37,13 +36,26 @@ function readInitialGrid() {
   }
 }
 
+function reasonToMethod(reason) {
+  const s = String(reason).toLowerCase();
+  if (s.includes("localstorage") || s.includes("trust chain (migration)")) return "localStorage";
+  if (s.includes("setsudokustate") || s.includes("injection") || s.includes("injected") || s.includes("state inj"))
+    return "injection";
+  if (s.includes("secret") && s.includes("decoder")) return "injection";
+  if (s.includes("wingame") || s.includes("runtime") || s.includes("called from")) return "winGame";
+  return "winGame";
+}
+
 export default function App() {
   const [grid, setGrid] = useState(readInitialGrid);
   const [message, setMessage] = useState("Fill the grid and check solution.");
   const [won, setWon] = useState(false);
+  const [labRec, setLabRec] = useState(null);
   const [antiCheatLock, setAntiCheatLock] = useState(false);
   const [lastHint, setLastHint] = useState("");
   const editTimestampsRef = useRef([]);
+
+  const handledRef = useRef(false);
 
   const canBypassAntiCheat = useMemo(
     () =>
@@ -57,48 +69,93 @@ export default function App() {
     return "http://localhost:8080";
   }, []);
 
+  const handleExploitWin = useCallback(async (reason) => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+    const m = reasonToMethod(reason);
+    const rec = await recordSolve({ method: m });
+    setLabRec(rec);
+    setWon(true);
+    setMessage(`Access granted: ${reason}`);
+    try {
+      localStorage.setItem(STORAGE_SOLVED_KEY, "true");
+    } catch {
+      /* */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (localStorage.getItem(SUDOKU_LAB_CONFIG.storage.labSolved) === "true") {
+      handledRef.current = true;
+      setWon(true);
+      setLabRec({
+        methodLabel: (() => {
+          try {
+            return localStorage.getItem("sudoku_method_label");
+          } catch {
+            return null;
+          }
+        })() || "— (restored)",
+        duplicate: true,
+        total: getTotalScore(),
+        hackme: readStoredHackMeResult() || { skipped: true, syncAttempted: false }
+      });
+      return;
+    }
+    if (localStorage.getItem(STORAGE_SOLVED_KEY) === "true") {
+      void handleExploitWin("localStorage trust chain (legacy migration).");
+    }
+  }, [handleExploitWin]);
+
   useEffect(() => {
     localStorage.setItem(STORAGE_GRID_KEY, JSON.stringify(grid));
   }, [grid]);
 
   useEffect(() => {
-    console.log("[HackTheSudoku] The solution is not in the grid.");
-    console.log("[HackTheSudoku] Inspect localStorage, global window methods, and hidden endpoints.");
-    console.log("[HackTheSudoku] fakeSignals:", fakeSignals);
+    if (import.meta.env.DEV) {
+      console.debug("[HackTheSudoku] Training hints: check localStorage, window (e.g. winGame), and the mock API.");
+    }
   }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const solvedFlag = localStorage.getItem(STORAGE_SOLVED_KEY);
-      if (solvedFlag === "true") {
-        internalWin("localStorage trust chain accepted.");
+      if (handledRef.current) return;
+      if (localStorage.getItem(STORAGE_SOLVED_KEY) === "true") {
+        handleExploitWin("localStorage trust chain accepted.");
+        return;
       }
-    }, 1200);
+      if (window.__SUDOKU_SOLUTION_INJECTED) {
+        handleExploitWin("State injection accepted (internal flag).");
+      }
+    }, 500);
     return () => clearInterval(interval);
-  }, []);
+  }, [handleExploitWin]);
 
   useEffect(() => {
-    window.winGame = () => internalWin("winGame() was called from runtime.");
-    window.getEncodedSudokuSecret = () => SECRET_B64;
-    window.__unlockWithSecret = (decodedText) => {
-      if (String(decodedText).toLowerCase().includes("solution is not in the grid")) {
-        internalWin("secret decoder accepted your token.");
-      } else {
-        setMessage("Secret token rejected.");
+    const onExploit = (e) => {
+      const d = e && e.detail;
+      if (!d || !d.kind) return;
+      if (d.kind === "winGame") {
+        void handleExploitWin(d.reason || "winGame()");
+        return;
+      }
+      if (d.kind === "setSudokuState" && Array.isArray(d.grid) && d.grid.length === 81) {
+        setGrid(d.grid.map((v) => String(v ?? "").slice(0, 1)));
+        window.__SUDOKU_SOLUTION_INJECTED = true;
+        void handleExploitWin("setSudokuState: full state injection (logic bypass).");
+        return;
+      }
+      if (d.kind === "unlock") {
+        if (String(d.text).toLowerCase().includes("solution is not in the grid")) {
+          void handleExploitWin("secret decoder accepted your token.");
+        } else {
+          setMessage("Secret token rejected.");
+        }
       }
     };
-    return () => {
-      delete window.winGame;
-      delete window.getEncodedSudokuSecret;
-      delete window.__unlockWithSecret;
-    };
-  }, []);
-
-  function internalWin(reason) {
-    setWon(true);
-    setMessage(`Access granted: ${reason}`);
-    localStorage.setItem(STORAGE_SOLVED_KEY, "true");
-  }
+    window.addEventListener("hackme-sudoku-exploit", onExploit);
+    return () => window.removeEventListener("hackme-sudoku-exploit", onExploit);
+  }, [handleExploitWin]);
 
   function onCellChange(index, value) {
     const digit = value.replace(/[^1-9]/g, "").slice(0, 1);
@@ -107,7 +164,6 @@ export default function App() {
       next[index] = digit;
       return next;
     });
-
     const now = Date.now();
     editTimestampsRef.current = editTimestampsRef.current.filter((t) => now - t < 3000);
     editTimestampsRef.current.push(now);
@@ -123,7 +179,6 @@ export default function App() {
       setMessage("Check is temporarily disabled by anti-cheat.");
       return;
     }
-
     try {
       const payload = grid.map((v) => Number(v || 0));
       const response = await fetch(`${apiBase}/api/validate`, {
@@ -132,9 +187,8 @@ export default function App() {
         body: JSON.stringify({ grid: payload })
       });
       const data = await response.json();
-
       if (data?.isValid === true && false) {
-        internalWin("unexpected valid path");
+        handleExploitWin("unexpected valid path");
       } else {
         setMessage(data?.message || "Invalid solution. Try again.");
       }
@@ -169,62 +223,116 @@ export default function App() {
     }
   }
 
+  function onResetPlatform() {
+    resetSudokuLabForReplay();
+    setGrid([...seedGrid]);
+    setWon(false);
+    setLabRec(null);
+    handledRef.current = false;
+    setMessage("Session reset. Challenge again.");
+  }
+
   if (won) {
+    const total = getTotalScore();
+    const method =
+      (labRec && labRec.methodLabel) ||
+      (() => {
+        try {
+          return localStorage.getItem("sudoku_method_label");
+        } catch {
+          return "—";
+        }
+      })() ||
+      "—";
+    const dup = labRec && labRec.duplicate;
+    const hm = (labRec && labRec.hackme) || readStoredHackMeResult() || { skipped: true, syncAttempted: false };
+    const hackmeLine = formatHackmeSummary(hm);
     return (
-      <main className="screen">
-        <section className="card success">
-          <h1>Hack The Sudoku</h1>
-          <p className="subtitle">You did not solve Sudoku... you exploited it.</p>
-          <p className="message">{message}</p>
-          <button
-            type="button"
-            onClick={() => {
-              localStorage.removeItem(STORAGE_SOLVED_KEY);
-              setWon(false);
-              setMessage("Session reset. Challenge again.");
-            }}
-          >
-            Reset Challenge
-          </button>
-        </section>
-      </main>
+      <div className="app-shell">
+        <header className="head-line">
+          <span className="lab-id">{SUDOKU_LAB_CONFIG.id}</span>
+          <span className="lab-badge">{SUDOKU_LAB_CONFIG.badge}</span>
+          <span className="lab-diff">{SUDOKU_LAB_CONFIG.difficulty}</span>
+        </header>
+        <main className="screen">
+          <section className="solved-card pop-in" role="status">
+            <p className="solved-ribbon">✔ Lab Solved</p>
+            <h1 className="solved-h1">Lab Solved <span className="ok-emoji">✅</span></h1>
+            <p className="solved-sub">You didn’t solve Sudoku… you exploited it.</p>
+            <p className="method-row">
+              Method: <strong>{method}</strong>
+            </p>
+            <p className="points-line">{dup ? "Points: already applied (100)" : "+100 Points"}</p>
+            <p className="total-line">Local (this browser) total: {total}</p>
+            {hackmeLine.text && (
+              <p className={hackmeLine.className} role="status">
+                {hackmeLine.text}
+              </p>
+            )}
+            <p className="lab-meta-tiny">
+              {SUDOKU_LAB_CONFIG.id} · {SUDOKU_LAB_CONFIG.difficulty}
+            </p>
+            <div className="solved-actions">
+              <button type="button" className="next-lab" onClick={() => returnToHackMeFromLab()}>
+                Next Lab
+              </button>
+            </div>
+            <p className="solved-note">Returns to the HackMe labs list (or closes this tab if you opened the lab with Start Lab).</p>
+            <button type="button" className="reset-outline" onClick={onResetPlatform}>
+              Reset challenge
+            </button>
+          </section>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="screen">
-      <section className="card">
-        <h1>Hack The Sudoku</h1>
-        <p className="subtitle">Looks like Sudoku. Plays like a CTF lab.</p>
-        <div className="grid">
-          {grid.map((value, idx) => (
-            <input
-              key={idx}
-              className="cell"
-              value={value}
-              onChange={(e) => onCellChange(idx, e.target.value)}
-              inputMode="numeric"
-              maxLength={1}
-            />
-          ))}
-        </div>
-        <div className="actions">
-          <button type="button" onClick={checkSolution}>
-            Check Solution
-          </button>
-          <button type="button" onClick={fetchHint}>
-            Request Hint
-          </button>
-          <button type="button" onClick={trySecretEndpoint}>
-            Probe Secret
-          </button>
-          <button type="button" disabled title="Restricted by internal policy">
-            Admin Override
-          </button>
-        </div>
-        <p className="message">{message}</p>
-        {lastHint && <p className="hint">Hint: {lastHint}</p>}
-      </section>
-    </main>
+    <div className="app-shell">
+      <header className="head-line">
+        <span className="lab-id">{SUDOKU_LAB_CONFIG.id}</span>
+        <span className="lab-badge">{SUDOKU_LAB_CONFIG.badge}</span>
+        <span className="lab-diff">{SUDOKU_LAB_CONFIG.difficulty}</span>
+      </header>
+      <main className="screen">
+        <section className="card">
+          <h1>{SUDOKU_LAB_CONFIG.title}</h1>
+          <p className="subtitle">Looks like Sudoku. Plays like a CTF lab.</p>
+          <p className="discover-hint" role="note">
+            <strong>Recon:</strong> In <strong>Elements</strong> / View Source, look for the second module script:{" "}
+            <code>labApp.js</code> (or <code>src="js/labApp.js"</code> in the page comment) — open it in <strong>Sources</strong>, or
+            in <strong>Console</strong> run <code>winGame()</code>.
+          </p>
+          <div className="grid">
+            {grid.map((value, idx) => (
+              <input
+                key={idx}
+                className="cell"
+                value={value}
+                onChange={(e) => onCellChange(idx, e.target.value)}
+                inputMode="numeric"
+                maxLength={1}
+              />
+            ))}
+          </div>
+          <div className="actions">
+            <button type="button" onClick={checkSolution}>
+              Check Solution
+            </button>
+            <button type="button" onClick={fetchHint}>
+              Request Hint
+            </button>
+            <button type="button" onClick={trySecretEndpoint}>
+              Probe Secret
+            </button>
+            <button type="button" disabled title="Restricted by internal policy">
+              Admin Override
+            </button>
+          </div>
+          <p className="message">{message}</p>
+          {lastHint && <p className="hint">Hint: {lastHint}</p>}
+        </section>
+      </main>
+    </div>
   );
 }
