@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hack-the-sudoku-api
+    ports:
+      - "8080:8080"
+    environment:
+      COMPOSE_HINT: "Check service names and exposed debug endpoint."
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: "http://backend:8080"
+    container_name: hack-the-sudoku-web
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
