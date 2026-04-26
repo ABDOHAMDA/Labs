@@ -3,14 +3,9 @@
  * Public profile lookup by id (GET). Returns JSON only.
  * The id parameter is concatenated into SQL — intended lab surface: UNION-based injection only.
  *
- * PHP 8.1+ mysqli can throw mysqli_sql_exception on failed queries; uncaught → HTTP 500 with empty body.
- * We disable exception mode and handle errors explicitly so the UI always gets JSON.
+ * Connection uses PDO with libmysql-style error handling (no exceptions on query failure) so the UI always gets JSON.
  */
 require_once __DIR__ . '/config.php';
-
-if (function_exists('mysqli_report')) {
-    mysqli_report(MYSQLI_REPORT_OFF);
-}
 
 // Do NOT use trim(): trailing space after "-- " is required for MySQL line comments; trim() broke UNION payloads.
 $id = isset($_GET['id']) ? ltrim((string) $_GET['id']) : '';
@@ -50,7 +45,6 @@ try {
     try {
         $result = $conn->query($sql);
     } catch (Throwable $qe) {
-        // mysqli_sql_exception or any driver error
         $out['message'] = 'Query error: ' . $qe->getMessage();
         academy_member_send_json($out, $jsonFlags);
         exit;
@@ -65,7 +59,7 @@ try {
     $rows = [];
     $maxRows = 5000;
     $n = 0;
-    if ($result instanceof mysqli_result) {
+    if (is_object($result) && method_exists($result, 'fetch_assoc')) {
         while ($n < $maxRows && ($row = $result->fetch_assoc())) {
             $n++;
             // Do not cast user_id to int: UNION/injection puts strings (e.g. table_name) in column 1 — (int)"academy_users" === 0.

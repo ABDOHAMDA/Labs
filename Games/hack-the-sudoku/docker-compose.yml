@@ -19,6 +19,6 @@ services:
         VITE_API_BASE: "http://backend:8080"
     container_name: hack-the-sudoku-web
     ports:
-      - "5173:80"
+      - "4011:80"
     depends_on:
       - backend
