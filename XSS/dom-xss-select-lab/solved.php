@@ -5,6 +5,9 @@
  */
 $labId = (int)($_GET['labId'] ?? $_GET['lab_id'] ?? 0);
 $token = trim((string)($_GET['token'] ?? ''));
+$deviceBind = trim((string)($_GET['device_bind'] ?? ''));
+$macAddr = trim((string)($_GET['mac_address'] ?? ''));
+$clientLocalIp = trim((string)($_GET['client_local_ip'] ?? ''));
 
 $hackMeApi = 'http://localhost/HackMe/server/api/labs/lab_solved.php';
 ?>
@@ -34,6 +37,9 @@ $hackMeApi = 'http://localhost/HackMe/server/api/labs/lab_solved.php';
     (function() {
       var labId = <?= (int)$labId ?>;
       var token = <?= json_encode($token) ?>;
+      var deviceBind = <?= json_encode($deviceBind) ?>;
+      var macAddress = <?= json_encode($macAddr) ?>;
+      var clientLocalIp = <?= json_encode($clientLocalIp) ?>;
       var api = <?= json_encode($hackMeApi) ?>;
 
       if (!labId || !token) {
@@ -44,7 +50,14 @@ $hackMeApi = 'http://localhost/HackMe/server/api/labs/lab_solved.php';
       fetch(api, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lab_id: labId, labId: labId, token: token })
+        body: JSON.stringify({
+          lab_id: labId,
+          labId: labId,
+          token: token,
+          device_bind: deviceBind,
+          mac_address: macAddress,
+          client_local_ip: clientLocalIp
+        })
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {

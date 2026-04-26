@@ -48,7 +48,14 @@ const WATCHES = [
 
 const SandboxLabApp = () => {
   const [accessStatus, setAccessStatus] = useState("checking");
-  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [labParams, setLabParams] = useState({
+    labId: null,
+    token: null,
+    userId: null,
+    deviceBind: "",
+    machineMac: "",
+    clientLocalIp: "",
+  });
   const [view, setView] = useState("home"); // 'home' | 'signin' | 'profile' (when logged in)
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -63,13 +70,20 @@ const SandboxLabApp = () => {
     const params = new URLSearchParams(window.location.search);
     const labId = params.get("labId");
     const token = params.get("token");
+    const deviceBind = params.get("device_bind") || "";
+    const machineMac = params.get("mac_address") || "";
+    const clientLocalIp = params.get("client_local_ip") || "";
     if (!labId || !token) {
       setAccessStatus("denied");
       return;
     }
     (async () => {
       try {
-        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const bindQ =
+          (deviceBind ? `&device_bind=${encodeURIComponent(deviceBind)}` : "") +
+          (machineMac ? `&mac_address=${encodeURIComponent(machineMac)}` : "") +
+          (clientLocalIp ? `&client_local_ip=${encodeURIComponent(clientLocalIp)}` : "");
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}${bindQ}`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
         setAccessStatus(data.valid ? "granted" : "denied");
@@ -78,6 +92,9 @@ const SandboxLabApp = () => {
             labId,
             token,
             userId: data.user_id > 0 ? data.user_id : null,
+            deviceBind,
+            machineMac,
+            clientLocalIp,
           });
         }
       } catch {
@@ -87,7 +104,7 @@ const SandboxLabApp = () => {
   }, []);
 
   const submitLabSolved = async () => {
-    const { labId, userId } = labParams;
+    const { labId, userId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !userId) return;
     try {
       const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
@@ -97,6 +114,10 @@ const SandboxLabApp = () => {
           lab_id: Number(labId),
           flag: LAB_FLAG,
           user_id: userId,
+          access_token: token || "",
+          device_bind: deviceBind || "",
+          mac_address: machineMac || "",
+          client_local_ip: clientLocalIp || "",
         }),
       });
       const data = await res.json().catch(() => ({}));

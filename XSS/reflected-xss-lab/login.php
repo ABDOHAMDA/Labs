@@ -11,9 +11,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $pass = $_POST['password'] ?? '';
   if ($user === $valid_user && $pass === $valid_pass) {
     $_SESSION['blog_user'] = $user;
+    $g = static function (string $k) {
+      return $_POST[$k] ?? $_GET[$k] ?? null;
+    };
     $params = [];
-    if (!empty($_GET['labId'])) $params['labId'] = $_GET['labId'];
-    if (!empty($_GET['token'])) $params['token'] = $_GET['token'];
+    if (!empty($g('labId'))) $params['labId'] = $g('labId');
+    if (!empty($g('token'))) $params['token'] = $g('token');
+    if (!empty($g('device_bind'))) $params['device_bind'] = $g('device_bind');
+    if (!empty($g('mac_address'))) $params['mac_address'] = $g('mac_address');
+    if (!empty($g('client_local_ip'))) $params['client_local_ip'] = $g('client_local_ip');
     header('Location: index.php' . ($params ? '?' . http_build_query($params) : ''));
     exit;
   }
@@ -35,6 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="tagline">Sign in to continue</p>
     </header>
     <form method="POST" class="login-form">
+      <?php if (!empty($_GET['labId'])): ?><input type="hidden" name="labId" value="<?php echo htmlspecialchars((string) $_GET['labId'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+      <?php if (!empty($_GET['token'])): ?><input type="hidden" name="token" value="<?php echo htmlspecialchars((string) $_GET['token'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+      <?php if (!empty($_GET['device_bind'])): ?><input type="hidden" name="device_bind" value="<?php echo htmlspecialchars((string) $_GET['device_bind'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+      <?php if (!empty($_GET['mac_address'])): ?><input type="hidden" name="mac_address" value="<?php echo htmlspecialchars((string) $_GET['mac_address'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+      <?php if (!empty($_GET['client_local_ip'])): ?><input type="hidden" name="client_local_ip" value="<?php echo htmlspecialchars((string) $_GET['client_local_ip'], ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
       <div class="form-group">
         <label>Username</label>
         <input type="text" name="username" required />

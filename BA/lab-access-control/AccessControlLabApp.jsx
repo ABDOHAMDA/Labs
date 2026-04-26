@@ -180,7 +180,14 @@ function getViewFromHash() {
 
 const AccessControlLabApp = () => {
   const [accessStatus, setAccessStatus] = useState("checking");
-  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [labParams, setLabParams] = useState({
+    labId: null,
+    token: null,
+    userId: null,
+    deviceBind: "",
+    machineMac: "",
+    clientLocalIp: "",
+  });
   const [popup, setPopup] = useState(null);
   const [blogs, setBlogs] = useState(() => BLOGS.map((b) => ({ ...b })));
   const [blogModal, setBlogModal] = useState(null);
@@ -210,13 +217,20 @@ const AccessControlLabApp = () => {
     const params = new URLSearchParams(window.location.search);
     const labId = params.get("labId");
     const token = params.get("token");
+    const deviceBind = params.get("device_bind") || "";
+    const machineMac = params.get("mac_address") || "";
+    const clientLocalIp = params.get("client_local_ip") || "";
     if (!labId || !token) {
       setAccessStatus("denied");
       return;
     }
     (async () => {
       try {
-        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const bindQ =
+          (deviceBind ? `&device_bind=${encodeURIComponent(deviceBind)}` : "") +
+          (machineMac ? `&mac_address=${encodeURIComponent(machineMac)}` : "") +
+          (clientLocalIp ? `&client_local_ip=${encodeURIComponent(clientLocalIp)}` : "");
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}${bindQ}`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
         setAccessStatus(data.valid ? "granted" : "denied");
@@ -225,6 +239,9 @@ const AccessControlLabApp = () => {
             labId,
             token,
             userId: data.user_id > 0 ? data.user_id : null,
+            deviceBind,
+            machineMac,
+            clientLocalIp,
           });
         }
       } catch {
@@ -234,7 +251,7 @@ const AccessControlLabApp = () => {
   }, []);
 
   const submitLabSolved = async () => {
-    const { labId, userId, token } = labParams;
+    const { labId, userId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !token) {
       setPopup({
         type: "flag_error",
@@ -248,6 +265,9 @@ const AccessControlLabApp = () => {
       flag: LAB_FLAG,
       user_id: userId > 0 ? userId : 0,
       access_token: token,
+      device_bind: deviceBind || "",
+      mac_address: machineMac || "",
+      client_local_ip: clientLocalIp || "",
     };
     try {
       const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {

@@ -78,8 +78,14 @@ function searchParamsLabOnly(sourceParams) {
   const sp = new URLSearchParams();
   const lid = sourceParams.get("labId");
   const tok = sourceParams.get("token");
+  const bind = sourceParams.get("device_bind");
+  const mac = sourceParams.get("mac_address");
+  const local = sourceParams.get("client_local_ip");
   if (lid) sp.set("labId", lid);
   if (tok) sp.set("token", tok);
+  if (bind) sp.set("device_bind", bind);
+  if (mac) sp.set("mac_address", mac);
+  if (local) sp.set("client_local_ip", local);
   return sp;
 }
 
@@ -175,7 +181,14 @@ Legal and policy considerations: ensure lab use is authorized, data is synthetic
 function Lab2App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [accessStatus, setAccessStatus] = useState("checking");
-  const [labParams, setLabParams] = useState({ labId: null, token: null, userId: null });
+  const [labParams, setLabParams] = useState({
+    labId: null,
+    token: null,
+    userId: null,
+    deviceBind: "",
+    machineMac: "",
+    clientLocalIp: "",
+  });
   const [popup, setPopup] = useState(null);
   const [delegatedAdmins, setDelegatedAdmins] = useState(null);
   const [signInOpen, setSignInOpen] = useState(false);
@@ -236,13 +249,20 @@ function Lab2App() {
     const params = new URLSearchParams(window.location.search);
     const labId = params.get("labId");
     const token = params.get("token");
+    const deviceBind = params.get("device_bind") || "";
+    const machineMac = params.get("mac_address") || "";
+    const clientLocalIp = params.get("client_local_ip") || "";
     if (!labId || !token) {
       setAccessStatus("denied");
       return;
     }
     (async () => {
       try {
-        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const bindQ =
+          (deviceBind ? `&device_bind=${encodeURIComponent(deviceBind)}` : "") +
+          (machineMac ? `&mac_address=${encodeURIComponent(machineMac)}` : "") +
+          (clientLocalIp ? `&client_local_ip=${encodeURIComponent(clientLocalIp)}` : "");
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}${bindQ}`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
         setAccessStatus(data.valid ? "granted" : "denied");
@@ -251,6 +271,9 @@ function Lab2App() {
             labId,
             token,
             userId: data.user_id > 0 ? data.user_id : null,
+            deviceBind,
+            machineMac,
+            clientLocalIp,
           });
         }
       } catch {
@@ -301,7 +324,7 @@ function Lab2App() {
   }, [accessStatus]);
 
   const submitLabSolved = async () => {
-    const { labId, userId: hackUserId, token } = labParams;
+    const { labId, userId: hackUserId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !token) {
       setPopup({
         type: "flag_error",
@@ -315,6 +338,9 @@ function Lab2App() {
       flag: LAB_FLAG,
       user_id: hackUserId > 0 ? hackUserId : 0,
       access_token: token,
+      device_bind: deviceBind || "",
+      mac_address: machineMac || "",
+      client_local_ip: clientLocalIp || "",
     };
     try {
       const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {

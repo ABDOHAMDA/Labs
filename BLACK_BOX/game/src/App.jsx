@@ -11,7 +11,14 @@ const LAB_POINTS = 300;
 
 export default function App() {
   const [accessState, setAccessState] = useState("checking");
-  const [labSession, setLabSession] = useState({ labId: null, token: null, userId: null });
+  const [labSession, setLabSession] = useState({
+    labId: null,
+    token: null,
+    userId: null,
+    deviceBind: "",
+    machineMac: "",
+    clientLocalIp: "",
+  });
 
   const [submittingSolve, setSubmittingSolve] = useState(false);
   const [resultState, setResultState] = useState({ open: false, title: "", message: "", points: 0 });
@@ -32,11 +39,14 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const labId = params.get("labId");
     const token = params.get("token");
+    const deviceBind = params.get("device_bind") || "";
+    const machineMac = params.get("mac_address") || "";
+    const clientLocalIp = params.get("client_local_ip") || "";
     if (!labId || !token) {
       if (isLocalPreviewHost) {
         // Keep frontend visible in local dev even without HackMe launch params.
         setAccessState("granted");
-        setLabSession({ labId: null, token: null, userId: 0 });
+        setLabSession({ labId: null, token: null, userId: 0, deviceBind: "", machineMac: "", clientLocalIp: "" });
       } else {
         setAccessState("denied");
       }
@@ -44,16 +54,20 @@ export default function App() {
     }
     const check = async () => {
       try {
-        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}`;
+        const bindQ =
+          (deviceBind ? `&device_bind=${encodeURIComponent(deviceBind)}` : "") +
+          (machineMac ? `&mac_address=${encodeURIComponent(machineMac)}` : "") +
+          (clientLocalIp ? `&client_local_ip=${encodeURIComponent(clientLocalIp)}` : "");
+        const url = `${HACKME_API_BASE}/verify_lab_token.php?token=${encodeURIComponent(token)}&lab_id=${encodeURIComponent(labId)}${bindQ}`;
         const res = await fetch(url);
         const data = await res.json().catch(() => ({}));
         if (data.valid) {
           setAccessState("granted");
-          setLabSession({ labId, token, userId: data.user_id ?? 0 });
+          setLabSession({ labId, token, userId: data.user_id ?? 0, deviceBind, machineMac, clientLocalIp });
         } else {
           if (isLocalPreviewHost) {
             setAccessState("granted");
-            setLabSession({ labId, token, userId: data.user_id ?? 0 });
+            setLabSession({ labId, token, userId: data.user_id ?? 0, deviceBind, machineMac, clientLocalIp });
           } else {
             setAccessState("denied");
           }
@@ -61,7 +75,7 @@ export default function App() {
       } catch (_) {
         if (isLocalPreviewHost) {
           setAccessState("granted");
-          setLabSession({ labId, token, userId: 0 });
+          setLabSession({ labId, token, userId: 0, deviceBind, machineMac, clientLocalIp });
         } else {
           setAccessState("denied");
         }
@@ -88,7 +102,7 @@ export default function App() {
   }, []);
 
   const submitSolved = async () => {
-    const { labId, token, userId } = labSession;
+    const { labId, token, userId, deviceBind, machineMac, clientLocalIp } = labSession;
     if (!labId || !token) {
       return {
         ok: false,
@@ -102,6 +116,9 @@ export default function App() {
       flag: LAB_FLAG,
       user_id: Number(userId) || 0,
       access_token: token,
+      device_bind: deviceBind || "",
+      mac_address: machineMac || "",
+      client_local_ip: clientLocalIp || "",
     };
     try {
       const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {

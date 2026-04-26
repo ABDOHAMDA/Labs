@@ -4,6 +4,9 @@ session_start();
 
 $labId = $_GET['labId'] ?? $_GET['lab_id'] ?? '';
 $token = $_GET['token'] ?? '';
+$deviceBind = $_GET['device_bind'] ?? '';
+$macAddress = $_GET['mac_address'] ?? '';
+$clientLocalIp = $_GET['client_local_ip'] ?? '';
 
 if (empty($_SESSION['blog_user'])) {
   $redirect = 'login.php';
@@ -66,12 +69,15 @@ if ($q !== '') {
         <h1>Reflected XSS Blog</h1>
         <p class="tagline">Logged in as <?php echo htmlspecialchars($username); ?></p>
       </div>
-      <a class="logout-btn" href="logout.php<?php echo ($labId || $token) ? '?' . http_build_query(array_filter(['labId'=>$labId,'token'=>$token])) : ''; ?>">Logout</a>
+      <a class="logout-btn" href="logout.php<?php echo ($labId || $token) ? '?' . http_build_query(array_filter(['labId'=>$labId,'token'=>$token,'device_bind'=>$deviceBind,'mac_address'=>$macAddress,'client_local_ip'=>$clientLocalIp])) : ''; ?>">Logout</a>
     </div>
 
     <form method="GET" class="search-form">
       <?php if ($labId): ?><input type="hidden" name="labId" value="<?php echo htmlspecialchars($labId); ?>"><?php endif; ?>
       <?php if ($token): ?><input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>"><?php endif; ?>
+      <?php if ($deviceBind): ?><input type="hidden" name="device_bind" value="<?php echo htmlspecialchars($deviceBind); ?>"><?php endif; ?>
+      <?php if ($macAddress): ?><input type="hidden" name="mac_address" value="<?php echo htmlspecialchars($macAddress); ?>"><?php endif; ?>
+      <?php if ($clientLocalIp): ?><input type="hidden" name="client_local_ip" value="<?php echo htmlspecialchars($clientLocalIp); ?>"><?php endif; ?>
       <input type="text" name="q" placeholder="Search posts..." value="<?php echo $q !== '' ? htmlspecialchars($q) : ''; ?>" />
       <button type="submit">Search</button>
     </form>
