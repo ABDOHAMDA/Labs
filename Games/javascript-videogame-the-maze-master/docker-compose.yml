@@ -1,0 +1,8 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maze_master_lab_web
+    ports:
+      - "4012:80"
