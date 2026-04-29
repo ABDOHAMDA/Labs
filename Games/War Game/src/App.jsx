@@ -18,6 +18,11 @@ import {
   User,
 } from "lucide-react";
 
+const LAB_DEFAULT_ID = 30;
+const LAB_DEFAULT_POINTS = 200;
+const HACKME_API_BASE =
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+
 export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-teal-950/20 to-slate-950 text-slate-100">
@@ -69,6 +74,7 @@ function WarGameLab30() {
 
   const tickRef = useRef(null);
   const botRef = useRef(null);
+  const winSubmittedRef = useRef(false);
 
   const applyUrl = (next) => {
     const url = new URL(window.location.href);
@@ -157,6 +163,7 @@ function WarGameLab30() {
     setCart([]);
     setBlueRule("");
     setBlueDeployResult(null);
+    winSubmittedRef.current = false;
   };
 
   const pushEvent = (kind, text) => {
@@ -175,6 +182,57 @@ function WarGameLab30() {
     setPage("scoreboard");
     applyUrl({ page: "scoreboard" });
     pushEvent("end", "Game ended.");
+  };
+
+  const submitLabSolved = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const token = (params.get("token") || "").trim();
+    const labId = Number(params.get("labId") || params.get("lab_id") || LAB_DEFAULT_ID);
+
+    if (!token) {
+      pushEvent("info", "Win recorded locally. Start from HackMe token URL to sync +200 points.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${HACKME_API_BASE}/labs/lab_solved.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lab_id: labId, token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const msg = String(data?.message || "");
+      const accepted = Boolean(data?.success) || msg === "LAB_ALREADY_SOLVED";
+      if (!accepted) {
+        pushEvent("error", `HackMe sync failed: ${data?.detail || msg || `HTTP_${res.status}`}`);
+        return;
+      }
+
+      const alreadySolved = msg === "LAB_ALREADY_SOLVED" || data?.data?.already_solved === true;
+      const serverPoints = Number(data?.data?.points_earned);
+      const points = alreadySolved
+        ? 0
+        : Number.isFinite(serverPoints) && serverPoints > 0
+          ? serverPoints
+          : LAB_DEFAULT_POINTS;
+
+      if (window.opener) {
+        window.opener.postMessage(
+          { type: "HACKME_LAB_SOLVED", labId: Number(labId), lab_id: Number(labId), points },
+          "*",
+        );
+        window.opener.postMessage({ type: "LAB_SOLVED", labId: Number(labId) }, "*");
+      }
+
+      pushEvent(
+        "score",
+        alreadySolved
+          ? "HackMe: lab already solved before (no extra points)."
+          : `HackMe: +${points} points synced.`,
+      );
+    } catch (error) {
+      pushEvent("error", `HackMe sync error: ${error?.message || "network error"}`);
+    }
   };
 
   useEffect(() => {
@@ -569,7 +627,14 @@ function WarGameLab30() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="mt-6 space-y-3">
+        <div className="max-w-xl rounded-xl border border-teal-400/50 bg-teal-950/80 px-4 py-3 text-sm shadow-sm">
+          <p className="text-slate-50 leading-relaxed">
+            <span className="font-semibold text-teal-300">Lab duration:</span>{" "}
+            <span className="font-bold text-amber-300">2 minutes</span>{" "}
+            <span className="text-slate-200">from the moment you press Start.</span>
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -585,11 +650,8 @@ function WarGameLab30() {
           disabled={!role}
           className="inline-flex items-center justify-center rounded-xl bg-teal-600 hover:bg-teal-500 text-white px-8 py-3 text-sm font-bold shadow-md transition-colors disabled:opacity-40"
         >
-          Start (2 minutes)
+          Start
         </button>
-        <p className="text-sm text-slate-400 max-w-xl">
-          Tip: explore the shop like a real site — issues are not labeled on screen.
-        </p>
       </div>
     </div>
   );
@@ -654,6 +716,13 @@ function WarGameLab30() {
   const winner = redScore === blueScore ? "draw" : redScore > blueScore ? "red" : "blue";
   const youWon = phase === "ended" && winner !== "draw" && winner === youSide;
   const youLost = phase === "ended" && winner !== "draw" && winner !== youSide;
+
+  useEffect(() => {
+    if (!youWon || winSubmittedRef.current) return;
+    winSubmittedRef.current = true;
+    submitLabSolved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [youWon]);
 
   const PRODUCTS = useMemo(
     () => [
@@ -773,7 +842,8 @@ function WarGameLab30() {
                 OmniMart
               </h1>
               <p className="text-slate-600 max-w-xl mx-auto mb-6 text-base leading-relaxed">
-                A general store simulation: Red vs Blue for 2 minutes. Pick a side and difficulty, then explore the shop.
+                A Red vs Blue store simulation. Each round lasts <strong>2 minutes</strong> after you press Start. Choose a
+                side and difficulty, then play.
               </p>
             </div>
             <div className="max-w-5xl mx-auto mt-8">{setupInfo}</div>

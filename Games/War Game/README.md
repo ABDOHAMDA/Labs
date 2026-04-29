@@ -15,7 +15,7 @@ This lab is part of the `Games` Docker app (port **4005**).
 
 ## Run
 
-From `Labs/Games`:
+From `Labs/Games/War Game`:
 
 ```bash
 docker compose up --build
