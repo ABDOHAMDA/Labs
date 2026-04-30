@@ -256,8 +256,7 @@ export default function App() {
         </header>
         <main className="screen">
           <section className="solved-card pop-in" role="status">
-            <p className="solved-ribbon">✔ Lab Solved</p>
-            <h1 className="solved-h1">Lab Solved <span className="ok-emoji">✅</span></h1>
+            <p className="solved-ribbon"> Lab Solved</p>
             <p className="solved-sub">You didn’t solve Sudoku… you exploited it.</p>
             <p className="method-row">
               Method: <strong>{method}</strong>
