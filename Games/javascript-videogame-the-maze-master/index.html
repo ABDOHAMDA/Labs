@@ -1,4 +1,5 @@
 <html>
+
 <head>
     <title>The Maze Game</title>
     <meta charset="utf-8">
@@ -8,8 +9,9 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
-        html, body {
+
+        html,
+        body {
             width: 100%;
             height: 100%;
             font-family: 'Arial', sans-serif;
@@ -19,7 +21,7 @@
             align-items: center;
             overflow: hidden;
         }
-        
+
         #welcome-screen {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
@@ -30,32 +32,33 @@
             animation: fadeIn 0.6s ease-in;
             z-index: 100;
         }
-        
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
                 transform: translateY(-30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
-        
+
         #welcome-screen h1 {
             font-size: 48px;
             color: #667eea;
             margin-bottom: 20px;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         #welcome-screen .subtitle {
             font-size: 18px;
             color: #764ba2;
             margin-bottom: 30px;
             font-weight: bold;
         }
-        
+
         #welcome-screen .description {
             font-size: 16px;
             color: #555;
@@ -63,7 +66,7 @@
             margin-bottom: 40px;
             text-align: justify;
         }
-        
+
         .play-button {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -77,16 +80,16 @@
             font-weight: bold;
             letter-spacing: 1px;
         }
-        
+
         .play-button:hover {
             transform: translateY(-3px);
             box-shadow: 0 15px 35px rgba(102, 126, 234, 0.6);
         }
-        
+
         .play-button:active {
             transform: translateY(-1px);
         }
-        
+
         #game-container {
             width: 100%;
             height: 100%;
@@ -132,7 +135,7 @@
             border-radius: 10px;
             padding: 10px 12px;
         }
-        
+
         canvas {
             background: url('img/maze_background.png');
             border: 5px solid;
@@ -186,6 +189,7 @@
         }
     </style>
 </head>
+
 <body>
     <div id="welcome-screen">
         <h1>🎮 The Maze</h1>
@@ -196,10 +200,12 @@
             through path logic, movement decisions, and runtime inspection.
             Use arrow keys to move and find the shortest path to escape.
         </p>
-        <p id="auth-status" class="subtitle" style="margin-top:-10px; margin-bottom:20px; color:#475569;">Verifying lab access token...</p>
-        <button id="start-btn" class="play-button" onclick="startGame()" disabled style="opacity:.55; cursor:not-allowed;">Play Game</button>
+        <p id="auth-status" class="subtitle" style="margin-top:-10px; margin-bottom:20px; color:#475569;">Verifying lab
+            access token...</p>
+        <button id="start-btn" class="play-button" onclick="startGame()" disabled
+            style="opacity:.55; cursor:not-allowed;">Play Game</button>
     </div>
-    
+
     <div id="game-container">
         <div id="game-toolbar">
             <button id="maze-reset-btn" type="button" onclick="resetMaze()">Reset Maze</button>
@@ -238,7 +244,7 @@
             }
 
             try {
-                const verifyUrl = new URL('http://localhost/HackMe/server/api/verify_lab_token.php');
+                const verifyUrl = new URL('http://localhost/HackMe/server/controllers/labs/verify_lab_token.php');
                 verifyUrl.searchParams.set('token', token);
                 verifyUrl.searchParams.set('lab_id', labId);
                 verifyUrl.searchParams.set('device_bind', deviceBind);
@@ -270,7 +276,7 @@
             const hashPanel = document.getElementById('hash-panel');
             if (hashPanel) hashPanel.style.display = 'block';
             // Initialize the game after showing the canvas
-            setTimeout(function() {
+            setTimeout(function () {
                 window.onload();
             }, 0);
         }
@@ -283,7 +289,7 @@
 
         window.addEventListener('DOMContentLoaded', verifyLabAccess);
     </script>
-    
+
     <script src='js/config.js?v=20260428a'></script>
     <script src='js/maze.js?v=20260428a'></script>
     <script src='js/input.js?v=20260428a'></script>
@@ -291,4 +297,5 @@
     <script src='js/ui.js?v=20260428a'></script>
     <script src='js/main.js?v=20260428a'></script>
 </body>
+
 </html>

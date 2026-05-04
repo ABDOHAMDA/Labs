@@ -261,8 +261,8 @@ export default function App() {
             <p className="method-row">
               Method: <strong>{method}</strong>
             </p>
-            <p className="points-line">{dup ? "Points: already applied (100)" : "+100 Points"}</p>
-            <p className="total-line">Local (this browser) total: {total}</p>
+            
+            
             {hackmeLine.text && (
               <p className={hackmeLine.className} role="status">
                 {hackmeLine.text}

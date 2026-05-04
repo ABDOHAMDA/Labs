@@ -1,4 +1,4 @@
-window.onload = function() {
+window.onload = function () {
     canvas = document.getElementById('canvas')
     canvas.width = 1080
     canvas.height = 620
@@ -25,7 +25,7 @@ var Game = {
     session: null,
     isHandlingSolve: false,
 
-    init: function(canvas) {
+    init: function (canvas) {
         this.canvas = canvas
         this.ctx = canvas.getContext('2d')
         this.ui = new UI()
@@ -34,7 +34,7 @@ var Game = {
         this.ui.showWelcomeScreen()
     },
 
-    readSessionFromUrl: function() {
+    readSessionFromUrl: function () {
         var p = new URLSearchParams(window.location.search)
         return {
             labId: Number(p.get('labId') || 42),
@@ -46,11 +46,11 @@ var Game = {
         }
     },
 
-    getAdaptiveColumns: function() {
+    getAdaptiveColumns: function () {
         return 30
     },
 
-    start: function(_columns) {
+    start: function (_columns) {
         this.paused = false
         if (this.reqanimationreference) {
             window.cancelAnimationFrame(this.reqanimationreference)
@@ -76,12 +76,12 @@ var Game = {
         this.reqanimationreference = window.requestAnimationFrame(Game.update)
         this.updateHud('Record your path by solving the maze once.')
     },
-    
-    goBackToMenu: function() {
+
+    goBackToMenu: function () {
         this.resetAttempt('Manual reset: start again from the beginning.')
     },
 
-    resetAttempt: function(message) {
+    resetAttempt: function (message) {
         this.paused = false
         if (this.player) {
             this.player.x = 0
@@ -101,7 +101,7 @@ var Game = {
         this.updateHud(message || '')
     },
 
-    onPlayerStep: function(direction) {
+    onPlayerStep: function (direction) {
         if (this.phase === 'record') {
             this.recordedMoves.push(direction)
             this.updateHud('Recording path... Moves: ' + this.recordedMoves.length)
@@ -120,7 +120,7 @@ var Game = {
         this.updateHud('Replay mode: ' + this.replayMoves.length + '/' + this.recordedMoves.length + ' moves matched.')
     },
 
-    onMazeSolved: async function() {
+    onMazeSolved: async function () {
         if (this.isHandlingSolve) return
         this.isHandlingSolve = true
         try {
@@ -178,7 +178,7 @@ var Game = {
         }
     },
 
-    updateHud: function(message) {
+    updateHud: function (message) {
         var panel = document.getElementById('hash-panel')
         if (!panel) return
         var phaseLabel = this.phase === 'record' ? 'Phase 1 (Record)' : this.phase === 'replay' ? 'Phase 2 (Replay)' : 'Solved'
@@ -186,21 +186,21 @@ var Game = {
         panel.textContent = phaseLabel + ' | ' + hashText + (message ? ' | ' + message : '')
     },
 
-    showMessage: function(text) {
+    showMessage: function (text) {
         var box = document.getElementById('game-message')
         if (!box) return
         box.style.display = 'block'
         box.textContent = text
     },
 
-    hashText: async function(value) {
+    hashText: async function (value) {
         try {
             if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === 'function') {
                 var enc = new TextEncoder()
                 var data = enc.encode(value)
                 var digest = await window.crypto.subtle.digest('SHA-256', data)
                 var bytes = Array.from(new Uint8Array(digest))
-                return bytes.map(function(b) {
+                return bytes.map(function (b) {
                     return b.toString(16).padStart(2, '0')
                 }).join('')
             }
@@ -218,7 +218,7 @@ var Game = {
         return (hex + hex + hex + hex + hex + hex + hex + hex).slice(0, 64)
     },
 
-    submitLabSolved: async function() {
+    submitLabSolved: async function () {
         if (this.labSolvedSubmitted) {
             return { ok: true, points: 0, message: 'Already submitted.' }
         }
@@ -232,7 +232,7 @@ var Game = {
             client_local_ip: this.session.clientLocalIp || '',
         }
         try {
-            var res = await fetch('http://localhost/HackMe/server/api/submit_flag.php', {
+            var res = await fetch('http://localhost/HackMe/server/controllers/labs/submit_flag.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -241,7 +241,7 @@ var Game = {
             var data = {}
             try {
                 data = raw ? JSON.parse(raw) : {}
-            } catch (_) {}
+            } catch (_) { }
             var msg = data.message || ''
             var accepted =
                 !!data.success ||
@@ -269,7 +269,7 @@ var Game = {
     },
 }
 
-Game.update = function() {
+Game.update = function () {
     this.reqanimationreference = window.requestAnimationFrame(Game.update)
     // One move per physical key press, including very quick taps.
     // Fallback to key state if consumePressed is unavailable (old cached input.js).
@@ -290,7 +290,7 @@ Game.update = function() {
     Game.render()
 }
 
-Game.render = function() {
+Game.render = function () {
     this.ctx.clearRect(0, 0, canvas.width, canvas.height)
     this.maze.render()
     this.player.render()

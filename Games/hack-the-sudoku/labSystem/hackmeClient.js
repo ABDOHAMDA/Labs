@@ -66,7 +66,7 @@ export async function syncHackMeAfterLocalSolve() {
       userHint: "Start this lab from HackMe (Start Lab) so the URL includes your token — then this window will add points to your HackMe account."
     };
   }
-  const url = `${baseUrl}/server/api/labs/lab_solved.php`;
+  const url = `${baseUrl}/server/controllers/labs/labs_api/lab_solved.php`;
   try {
     const res = await fetch(url, {
       method: "POST",
