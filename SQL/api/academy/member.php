@@ -7,11 +7,11 @@
  */
 require_once __DIR__ . '/config.php';
 
-// Do NOT use trim(): trailing space after "-- " is required for MySQL line comments; trim() broke UNION payloads.
+
 $id = isset($_GET['id']) ? ltrim((string) $_GET['id']) : '';
 
-// MySQL treats `--` as a comment only if followed by whitespace. Many URLs end with `--` without `%20`,
-// producing `...--'` which errors near `--''`. If id ends with `--` but not `-- `, append a space.
+
+
 if ($id !== '' && preg_match('/--$/', $id)) {
     $id .= ' ';
 }
@@ -39,7 +39,7 @@ try {
         exit;
     }
 
-    // Four columns (UNION payloads must match this order): user_name, password, role, email
+   
     $sql = "SELECT user_name, password, role, email FROM academy_users WHERE user_id = '" . $id . "'";
 
     try {
@@ -62,7 +62,7 @@ try {
     if (is_object($result) && method_exists($result, 'fetch_assoc')) {
         while ($n < $maxRows && ($row = $result->fetch_assoc())) {
             $n++;
-            // Do not cast user_id to int: UNION/injection puts strings (e.g. table_name) in column 1 — (int)"academy_users" === 0.
+            
             $rows[] = [
                 'user_name' => array_key_exists('user_name', $row) ? $row['user_name'] : null,
                 'password'  => array_key_exists('password', $row) ? $row['password'] : null,

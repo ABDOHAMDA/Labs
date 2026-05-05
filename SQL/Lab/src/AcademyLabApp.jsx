@@ -116,20 +116,20 @@ const loadAcademySession = (labId) => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed?.token && parsed?.user) return { token: parsed.token, user: parsed.user };
-  } catch (_) {}
+  } catch (_) { }
   return null;
 };
 const saveAcademySession = (labId, token, user) => {
   if (!labId || !token || !user) return;
   try {
     sessionStorage.setItem(academySessionKey(labId), JSON.stringify({ token, user }));
-  } catch (_) {}
+  } catch (_) { }
 };
 const clearAcademySession = (labId) => {
   if (!labId) return;
   try {
     sessionStorage.removeItem(academySessionKey(labId));
-  } catch (_) {}
+  } catch (_) { }
 };
 
 const COURSES = [
@@ -458,7 +458,7 @@ const AcademyLabApp = () => {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
           body: JSON.stringify({ token: authToken }),
         });
-      } catch (_) {}
+      } catch (_) { }
     }
     const lid =
       labParams.labId || new URLSearchParams(window.location.search).get("labId");
@@ -471,7 +471,7 @@ const AcademyLabApp = () => {
   const openCourse = (courseId) => {
     try {
       sessionStorage.setItem("academyLastCourse", courseId);
-    } catch (_) {}
+    } catch (_) { }
     const sp = new URLSearchParams(window.location.search);
     sp.set("view", "course");
     sp.set("id", courseId);
@@ -688,25 +688,92 @@ const AcademyLabApp = () => {
     let lastStored = null;
     try {
       lastStored = sessionStorage.getItem("academyLastCourse");
-    } catch (_) {}
+    } catch (_) { }
     const course =
       COURSES.find((c) => c.id === simpleId) ||
       COURSES.find((c) => c.id === lastStored) ||
       COURSES[0];
-    const rows = courseMemberData?.rows?.length ? courseMemberData.rows : courseMemberData?.member ? [courseMemberData.member] : [];
-    const displayRows = sortMemberRows(rows);
+
+    const rows = courseMemberData?.rows?.length
+      ? courseMemberData.rows
+      : courseMemberData?.member
+        ? [courseMemberData.member]
+        : [];
+
+    // ── Step detection from URL id param ──────────────────────────────────
+    const idLower = (urlCourseId || "").toLowerCase();
+    const isStep1 =
+      !isDefaultCourseId &&
+      idLower.includes("union") &&
+      !idLower.includes("information_schema") &&
+      !idLower.includes("from academy_users");
+    const isStep2 = idLower.includes("information_schema.tables");
+    const isStep3 = idLower.includes("information_schema.columns");
+    const isStep4 =
+      idLower.includes("from academy_users") &&
+      !idLower.includes("information_schema");
+
+    // ── Row filtering per step ─────────────────────────────────────────────
+    const sorted = sortMemberRows(rows);
+    const filteredRows = (() => {
+      if (isStep1) {
+        // Show ONLY the placeholder rows (e.g. user_name is '1' or numeric)
+        return sorted.filter(r => !isNaN(r.user_name) || r.user_name === '1');
+      }
+      if (isStep2) {
+        // Show ONLY the academy_users table entry
+        return sorted.filter(
+          (r) => String(r.user_name || "").toLowerCase() === "academy_users"
+        );
+      }
+      if (isStep3) {
+        // Just show the column names returned by information_schema
+        return sorted;
+      }
+      if (isStep4) {
+        // Show ONLY admin row(s) with real passwords
+        return sorted.filter(
+          (r) => r.role === "admin" && r.password && r.password !== "1"
+        );
+      }
+      // Default view: if it's a UNION but not a specific step, might be a partial attempt
+      if (!isDefaultCourseId && idLower.includes("union")) {
+         // If they haven't reached step 4, hide admin rows from general UNION results
+         return sorted.filter(r => r.role !== 'admin' || r.password === '1');
+      }
+      return sorted;
+    })();
+
+    // Steps 2 & 3 show only one column (the enumerated name); steps 1 & 4 show all 4
+    const multiCol = !isStep2 && !isStep3;
+    const firstColHeader = isStep2
+      ? "table_name"
+      : isStep3
+        ? "column_name"
+        : "user_name";
+
     const showDataPanel = !isDefaultCourseId;
+
+
 
     return (
       <main className="min-h-screen py-8 px-4 sm:px-6 pb-16">
         <div className="max-w-3xl mx-auto">
           <button
             type="button"
-            onClick={() => { const sp = new URLSearchParams(window.location.search); sp.delete("view"); sp.delete("id"); window.history.pushState({}, "", "?" + sp.toString()); setView("home"); }}
+            onClick={() => {
+              const sp = new URLSearchParams(window.location.search);
+              sp.delete("view");
+              sp.delete("id");
+              window.history.pushState({}, "", "?" + sp.toString());
+              setView("home");
+            }}
             className="inline-flex items-center gap-2 text-sm font-medium text-teal-200 hover:text-white mb-6 transition-colors"
           >
             ← Back to Home
           </button>
+
+
           <article className="rounded-3xl bg-white text-slate-900 shadow-xl p-6 sm:p-10 mb-8">
             <span className="text-4xl mb-4 block">{course.icon}</span>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">{course.name}</h1>
@@ -734,45 +801,41 @@ const AcademyLabApp = () => {
               )}
               {!courseMemberLoading && !courseMemberError && courseMemberData && (
                 <div className="overflow-x-auto bg-white">
-                  {displayRows.length > 0 ? (
-                    <table className="w-full min-w-[720px] table-fixed border-collapse text-sm text-slate-900">
-                      <colgroup>
-                        <col className="w-[22%]" />
-                        <col className="w-[24%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[36%]" />
-                      </colgroup>
+                  {filteredRows.length > 0 ? (
+                    <table className="w-full border-collapse text-sm text-slate-900">
                       <thead>
                         <tr className="bg-slate-100">
-                          <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800 align-top">
-                            user_name
+                          <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800">
+                            {firstColHeader}
                           </th>
-                          <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800 align-top">
-                            password
-                          </th>
-                          <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800 align-top">
-                            role
-                          </th>
-                          <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800 align-top">
-                            email
-                          </th>
+                          {multiCol && (
+                            <>
+                              <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800">password</th>
+                              <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800">role</th>
+                              <th className="border border-slate-300 px-3 py-2.5 text-left text-xs font-semibold text-slate-800">email</th>
+                            </>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
-                        {displayRows.map((row, idx) => (
+                        {filteredRows.map((row, idx) => (
                           <tr key={idx} className="odd:bg-white even:bg-slate-50/80 hover:bg-teal-50/60">
-                            <td className="border border-slate-200 px-3 py-2.5 align-top text-xs font-medium text-slate-900 break-words">
+                            <td className="border border-slate-200 px-3 py-2.5 text-xs font-medium text-slate-900 break-words">
                               {formatMemberCell(row.user_name)}
                             </td>
-                            <td className="border border-slate-200 px-3 py-2.5 align-top text-xs font-mono text-slate-900 break-words">
-                              {formatMemberCell(row.password)}
-                            </td>
-                            <td className="border border-slate-200 px-3 py-2.5 align-top text-xs text-slate-900 break-words">
-                              {formatMemberCell(row.role)}
-                            </td>
-                            <td className="border border-slate-200 px-3 py-2.5 align-top text-xs text-slate-900 break-words">
-                              {formatMemberCell(row.email)}
-                            </td>
+                            {multiCol && (
+                              <>
+                                <td className="border border-slate-200 px-3 py-2.5 text-xs font-mono text-slate-900 break-words">
+                                  {formatMemberCell(row.password)}
+                                </td>
+                                <td className="border border-slate-200 px-3 py-2.5 text-xs text-slate-900 break-words">
+                                  {formatMemberCell(row.role)}
+                                </td>
+                                <td className="border border-slate-200 px-3 py-2.5 text-xs text-slate-900 break-words">
+                                  {formatMemberCell(row.email)}
+                                </td>
+                              </>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -869,42 +932,42 @@ const AcademyLabApp = () => {
                 No account pending removal. If you already deleted it, the lab objective is done.
               </div>
             ) : (
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-slate-100 border-b border-slate-200 text-left">
-                  <th className="py-3 px-4 font-bold text-slate-800">ID</th>
-                  <th className="py-3 px-4 font-bold text-slate-800">Username</th>
-                  <th className="py-3 px-4 font-bold text-slate-800">Email</th>
-                  <th className="py-3 px-4 font-bold text-slate-800">Role</th>
-                  <th className="py-3 px-4 font-bold text-slate-800">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.user_id} className="border-b border-slate-100 hover:bg-teal-50/50">
-                    <td className="py-3 px-4 text-slate-800 font-mono">{u.user_id}</td>
-                    <td className="py-3 px-4 font-semibold text-slate-900">{u.user_name}</td>
-                    <td className="py-3 px-4 text-slate-700">{u.email || "—"}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${u.role === "admin" ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteUser(u.user_id)}
-                        disabled={deletingId === u.user_id}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 font-medium transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {deletingId === u.user_id ? "…" : "Delete"}
-                      </button>
-                    </td>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-200 text-left">
+                    <th className="py-3 px-4 font-bold text-slate-800">ID</th>
+                    <th className="py-3 px-4 font-bold text-slate-800">Username</th>
+                    <th className="py-3 px-4 font-bold text-slate-800">Email</th>
+                    <th className="py-3 px-4 font-bold text-slate-800">Role</th>
+                    <th className="py-3 px-4 font-bold text-slate-800">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.user_id} className="border-b border-slate-100 hover:bg-teal-50/50">
+                      <td className="py-3 px-4 text-slate-800 font-mono">{u.user_id}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">{u.user_name}</td>
+                      <td className="py-3 px-4 text-slate-700">{u.email || "—"}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${u.role === "admin" ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(u.user_id)}
+                          disabled={deletingId === u.user_id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 font-medium transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {deletingId === u.user_id ? "…" : "Delete"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>

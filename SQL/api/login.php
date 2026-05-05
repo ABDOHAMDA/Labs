@@ -6,7 +6,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 $username = $input['username'] ?? '';
 $password = $input['password'] ?? '';
 
-// VULNERABLE: Direct string concatenation - SQL Injection vulnerability
+
 $query = "SELECT * FROM users WHERE username = '$username' AND password = '$password'";
 
 $response = [
