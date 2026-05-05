@@ -13,7 +13,7 @@ if ($user_name === '' || $password === '') {
     exit;
 }
 
-// Login secured: prepared statements only (no SQLi here)
+
 $stmt = $conn->prepare("SELECT user_id, user_name, role, email FROM academy_users WHERE (user_name = ? OR email = ?) AND password = ? LIMIT 1");
 if (!$stmt) {
     $out['message'] = 'Server error';

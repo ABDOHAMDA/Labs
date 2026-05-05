@@ -54,8 +54,7 @@ $deleted = $stmt->affected_rows > 0;
 $stmt->close();
 
 if ($deleted) {
-    // Shared DB: immediately re-seed lab_target so the next learner sees the same scenario.
-    // Who may earn points is enforced only in HackMe (submissions per HackMe user_id).
+    
     $u = 'lab_target';
     $p = 'RemoveMe!99';
     $r = 'user';
