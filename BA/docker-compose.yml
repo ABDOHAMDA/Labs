@@ -11,6 +11,8 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    depends_on:
+      - api
     networks:
       - lab_network
 
@@ -19,6 +21,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: ba_access_control_labs_api
+    restart: on-failure
     environment:
       - MYSQL_HOST=db
     ports:

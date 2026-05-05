@@ -11,6 +11,8 @@ services:
     volumes:
       - ./Lab:/app
       - /app/node_modules
+    depends_on:
+      - api
     networks:
       - lab_network
 
@@ -19,6 +21,7 @@ services:
       context: ./api
       dockerfile: Dockerfile
     container_name: sql_lab_api
+    restart: on-failure
     ports:
       - "3000:80"
     volumes:

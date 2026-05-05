@@ -11,23 +11,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 header("Content-Type: application/json");
 
-require_once __DIR__ . '/../../lib/pdo_mysqli_shim.php';
-
 $host = "db";
 $user = "lab_user";
 $pass = "lab_pass";
 $db   = "security_lab_db";
 
-$dsn = "mysql:host={$host};dbname={$db};charset=utf8mb4";
-try {
-    $pdo = new PDO($dsn, $user, $pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
-} catch (PDOException $e) {
+$conn = new mysqli($host, $user, $pass, $db);
+if ($conn->connect_error) {
     http_response_code(500);
-    echo json_encode(["error" => "Connection failed: " . $e->getMessage()]);
+    echo json_encode(["error" => "Connection failed: " . $conn->connect_error]);
     exit;
 }
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
-$conn = new PdoMysqliShim($pdo);
+$conn->set_charset("utf8mb4");
