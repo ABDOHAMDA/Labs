@@ -2,9 +2,8 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "re
 import { Link, useSearchParams, useParams } from "react-router-dom";
 import { User, Shield, UserCog, CheckCircle2, X, Trash2, Lock, Mail, LogIn } from "lucide-react";
 
-const LAB_FLAG = "FLAG{IDOR_ACCESS_CONTROL_BYPASS}";
 const HACKME_API_BASE =
-  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/controllers/labs";
 /** Must match admin row in DB / fallback users (student copies from admin profile). */
 const TARGET_ADMIN_EMAIL = "admin@lab.local";
 
@@ -324,7 +323,7 @@ function Lab2App() {
   }, [accessStatus]);
 
   const submitLabSolved = async () => {
-    const { labId, userId: hackUserId, token, deviceBind, machineMac, clientLocalIp } = labParams;
+    const { labId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !token) {
       setPopup({
         type: "flag_error",
@@ -335,15 +334,13 @@ function Lab2App() {
     }
     const payload = {
       lab_id: Number(labId),
-      flag: LAB_FLAG,
-      user_id: hackUserId > 0 ? hackUserId : 0,
-      access_token: token,
+      token: token || "",
       device_bind: deviceBind || "",
       mac_address: machineMac || "",
       client_local_ip: clientLocalIp || "",
     };
     try {
-      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+      const res = await fetch(`${HACKME_API_BASE}/labs_api/lab_solved.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -360,14 +357,10 @@ function Lab2App() {
         });
         return false;
       }
-      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
-        const isFirstTime = data.message === "FLAG_CAPTURED";
-        const ptsForParent =
-          data.message === "FLAG_CAPTURED"
-            ? typeof data.points === "number"
-              ? data.points
-              : 150
-            : 0;
+      const msg = String(data?.message || "");
+      if (data.success || msg === "LAB_ALREADY_SOLVED") {
+        const isFirstTime = msg === "LAB_SOLVED";
+        const ptsForParent = isFirstTime ? (data.data?.points_earned || 150) : 0;
         setPopup({ type: isFirstTime ? "solved" : "already_solved" });
         if (window.opener) {
           window.opener.postMessage(
@@ -378,8 +371,8 @@ function Lab2App() {
         }
         return true;
       }
-      const errMsg = data.detail || data.message || `HackMe error (HTTP ${res.status})`;
-      setPopup({ type: "flag_error", message: errMsg, detail: data.message || "" });
+      const errMsg = data.detail || msg || `HackMe error (HTTP ${res.status})`;
+      setPopup({ type: "flag_error", message: errMsg, detail: msg });
       return false;
     } catch (e) {
       setPopup({

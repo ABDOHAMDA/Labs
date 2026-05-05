@@ -7,16 +7,25 @@
   <script>
     (function(){
       var orig = window.alert;
-      var HACKME_API = "http://localhost/HackMe/server/api/labs/lab_solved.php";
+      var HACKME_API = "http://localhost/HackMe/server/controllers/labs/labs_api/lab_solved.php";
       window.alert = function(){
         var p = new URLSearchParams(window.location.search);
         var labId = p.get("labId") || p.get("lab_id") || "";
         var token = p.get("token") || "";
+        var deviceBind = p.get("device_bind") || "";
+        var macAddress = p.get("mac_address") || "";
+        var clientLocalIp = p.get("client_local_ip") || "";
         if (labId && token) {
           fetch(HACKME_API, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lab_id: labId, token: token })
+            body: JSON.stringify({ 
+              lab_id: labId, 
+              token: token,
+              device_bind: deviceBind,
+              mac_address: macAddress,
+              client_local_ip: clientLocalIp
+            })
           })
           .then(function(r) { return r.json(); })
           .then(function(data) {

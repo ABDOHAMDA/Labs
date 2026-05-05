@@ -5,7 +5,7 @@ export const SUDOKU_LAB_CONFIG = {
   badge: "Client-Side Exploitation",
   difficulty: "Medium",
   title: "Hack The Sudoku",
-  points: 100,
+  points: 150,
   /** Must match HackMe `mockData` / DB lab_id for "Hack The Sudoku" (used if URL has ?token= but no labId). */
   hackme: {
     defaultLabId: 40

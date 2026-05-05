@@ -21,7 +21,7 @@ import {
 const LAB_DEFAULT_ID = 30;
 const LAB_DEFAULT_POINTS = 200;
 const HACKME_API_BASE =
-  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/controllers/labs";
 
 export default function App() {
   return (
@@ -188,6 +188,9 @@ function WarGameLab30() {
     const params = new URLSearchParams(window.location.search);
     const token = (params.get("token") || "").trim();
     const labId = Number(params.get("labId") || params.get("lab_id") || LAB_DEFAULT_ID);
+    const deviceBind = (params.get("device_bind") || "").trim();
+    const macAddress = (params.get("mac_address") || "").trim();
+    const clientLocalIp = (params.get("client_local_ip") || "").trim();
 
     if (!token) {
       pushEvent("info", "Win recorded locally. Start from HackMe token URL to sync +200 points.");
@@ -195,10 +198,16 @@ function WarGameLab30() {
     }
 
     try {
-      const res = await fetch(`${HACKME_API_BASE}/labs/lab_solved.php`, {
+      const res = await fetch(`${HACKME_API_BASE}/labs_api/lab_solved.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lab_id: labId, token }),
+        body: JSON.stringify({ 
+          lab_id: labId, 
+          token,
+          device_bind: deviceBind,
+          mac_address: macAddress,
+          client_local_ip: clientLocalIp
+        }),
       });
       const data = await res.json().catch(() => ({}));
       const msg = String(data?.message || "");

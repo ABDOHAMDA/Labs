@@ -3,7 +3,7 @@ import { User, LogOut, Trash2, Code, BookOpen, CheckCircle2, X, GraduationCap } 
 
 const ACADEMY_FLAG = "FLAG{ACADEMY_SQLI_DELETED}";
 const HACKME_API_BASE =
-  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/controllers/labs";
 
 /**
  * Academy PHP API (docker-compose maps api:80 → host :3000).
@@ -260,19 +260,17 @@ const AcademyLabApp = () => {
   }, []);
 
   const submitLabSolved = async () => {
-    const { labId, userId, token, deviceBind, machineMac, clientLocalIp } = labParams;
+    const { labId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !token) return;
     const payload = {
       lab_id: Number(labId),
-      flag: ACADEMY_FLAG,
-      user_id: userId > 0 ? userId : 0,
-      access_token: token,
+      token: token || "",
       device_bind: deviceBind || "",
       mac_address: machineMac || "",
       client_local_ip: clientLocalIp || "",
     };
     try {
-      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+      const res = await fetch(`${HACKME_API_BASE}/labs_api/lab_solved.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -289,15 +287,11 @@ const AcademyLabApp = () => {
         });
         return;
       }
-      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
-        const isFirstTime = data.message === "FLAG_CAPTURED";
+      const msg = String(data?.message || "");
+      if (data.success || msg === "LAB_ALREADY_SOLVED") {
+        const isFirstTime = msg === "LAB_SOLVED";
         // Parent toast (LabDetailsModern) only for real new points; refresh total in App either way.
-        const ptsForParent =
-          data.message === "FLAG_CAPTURED"
-            ? typeof data.points === "number"
-              ? data.points
-              : 150
-            : 0;
+        const ptsForParent = isFirstTime ? (data.data?.points_earned || 150) : 0;
         setPopup({ type: isFirstTime ? "solved" : "already_solved" });
         if (window.opener) {
           // LabDetailsModern listens for HACKME_LAB_SOLVED; App.jsx refreshes points on LAB_SOLVED or HACKME_LAB_SOLVED.
@@ -311,9 +305,9 @@ const AcademyLabApp = () => {
       }
       let errMsg =
         data.detail ||
-        data.message ||
+        msg ||
         (res.ok ? "Could not record solve" : `HackMe error (HTTP ${res.status})`);
-      if (data.message === "INVALID_FLAG" && Number(labId) === 10) {
+      if (msg === "INVALID_FLAG" && Number(labId) === 10) {
         errMsg =
           "HackMe does not have lab 10 flag data yet, or labId in the URL is not 10. Pull latest HackMe code, then delete the user again. If it persists, open this lab only via Start Lab (not a bookmark).";
       }

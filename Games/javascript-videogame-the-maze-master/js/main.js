@@ -224,15 +224,13 @@ var Game = {
         }
         var payload = {
             lab_id: Number(this.session.labId || 42),
-            flag: 'FLAG{MAZE_MASTER_HASH_42}',
-            user_id: Number(this.session.userId || 0),
-            access_token: this.session.token || '',
+            token: this.session.token || '',
             device_bind: this.session.deviceBind || '',
             mac_address: this.session.macAddress || '',
             client_local_ip: this.session.clientLocalIp || '',
         }
         try {
-            var res = await fetch('http://localhost/HackMe/server/controllers/labs/submit_flag.php', {
+            var res = await fetch('http://localhost/HackMe/server/controllers/labs/labs_api/lab_solved.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -245,14 +243,13 @@ var Game = {
             var msg = data.message || ''
             var accepted =
                 !!data.success ||
-                msg === 'FLAG_CAPTURED' ||
-                msg === 'LAB_ALREADY_SOLVED' ||
-                msg === 'FLAG_ALREADY_SUBMITTED'
+                msg === 'LAB_SOLVED' ||
+                msg === 'LAB_ALREADY_SOLVED'
             if (!accepted) {
                 return { ok: false, points: 0, message: data.detail || msg || 'Invalid response' }
             }
-            var isFirst = msg === 'FLAG_CAPTURED'
-            var pts = isFirst ? Number(data.points || 180) : 0
+            var isFirst = msg === 'LAB_SOLVED'
+            var pts = isFirst ? Number(data.data?.points_earned || 180) : 0
             var safePoints = Number.isFinite(pts) && pts > 0 ? pts : 0
             this.labSolvedSubmitted = true
             if (window.opener) {

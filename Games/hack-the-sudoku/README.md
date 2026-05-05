@@ -37,7 +37,7 @@ When a student uses **Start Lab** in the HackMe app, the browser opens the game 
 
 `http://localhost:4011/?labId=40&token=…`
 
-The lab calls HackMe’s **`POST …/server/api/labs/lab_solved.php`** with `{ "lab_id": 40, "token": "…" }` right after the first local exploit success. That is the same flow as other external labs: points and submissions go through the main platform (see `lab_completion_helper.php`).
+The lab calls HackMe’s **`POST …/server/controllers/labs/labs_api/lab_solved.php`** with `{ "lab_id": 40, "token": "…" }` right after the first local exploit success. That is the same flow as other external labs: points and submissions go through the main platform (see `lab_completion_helper.php`).
 
 - If there is **no** `token` in the query string (e.g. opening the game directly), local scoring still works, but the success panel tells the user to start from HackMe to sync the account.
 - **Vite / Docker build:** set `VITE_HACKME_BASE` to your HackMe origin (default `http://localhost/HackMe`). Static pages can set `window.__HACKME_BASE__` to override the base URL.

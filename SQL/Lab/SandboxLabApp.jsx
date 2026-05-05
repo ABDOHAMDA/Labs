@@ -3,7 +3,7 @@ import { User, LogOut, X, CheckCircle2, ArrowLeft } from "lucide-react";
 
 const LAB_FLAG = "FLAG{AUTH_BYPASS_123}";
 const HACKME_API_BASE =
-  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/controllers/labs";
 const API_URL = "http://localhost:3000";
 
 // Luxury watch store products with high-quality images
@@ -107,22 +107,21 @@ const SandboxLabApp = () => {
     const { labId, userId, token, deviceBind, machineMac, clientLocalIp } = labParams;
     if (!labId || !userId) return;
     try {
-      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+      const res = await fetch(`${HACKME_API_BASE}/labs_api/lab_solved.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           lab_id: Number(labId),
-          flag: LAB_FLAG,
-          user_id: userId,
-          access_token: token || "",
+          token: token || "",
           device_bind: deviceBind || "",
           mac_address: machineMac || "",
           client_local_ip: clientLocalIp || "",
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.success || data.message === "LAB_ALREADY_SOLVED" || data.message === "FLAG_ALREADY_SUBMITTED") {
-        const isFirstTime = data.message === "FLAG_CAPTURED";
+      const msg = String(data?.message || "");
+      if (data.success || msg === "LAB_ALREADY_SOLVED") {
+        const isFirstTime = msg === "LAB_SOLVED";
         setPopup({ type: isFirstTime ? "solved" : "already_solved" });
         if (window.opener) {
           window.opener.postMessage({ type: "LAB_SOLVED", labId }, "*");

@@ -9,7 +9,7 @@ $deviceBind = trim((string)($_GET['device_bind'] ?? ''));
 $macAddr = trim((string)($_GET['mac_address'] ?? ''));
 $clientLocalIp = trim((string)($_GET['client_local_ip'] ?? ''));
 
-$hackMeApi = 'http://localhost/HackMe/server/api/labs/lab_solved.php';
+$hackMeApi = 'http://localhost/HackMe/server/controllers/labs/labs_api/lab_solved.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">

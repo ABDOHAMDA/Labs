@@ -23,9 +23,12 @@ export function readLaunchContext() {
   const p = new URLSearchParams(window.location.search);
   let labId = Number(p.get("labId") || p.get("lab_id") || 0);
   const token = (p.get("token") || "").trim();
+  const deviceBind = (p.get("device_bind") || "").trim();
+  const macAddress = (p.get("mac_address") || "").trim();
+  const clientLocalIp = (p.get("client_local_ip") || "").trim();
   const def = SUDOKU_LAB_CONFIG.hackme?.defaultLabId ?? 40;
   if (labId < 1 && token) labId = def;
-  return { baseUrl: getHackMeBase(), labId, token };
+  return { baseUrl: getHackMeBase(), labId, token, deviceBind, macAddress, clientLocalIp };
 }
 
 export function readStoredHackMeResult() {
@@ -57,7 +60,7 @@ export function readStoredHackMeResult() {
  * }>}
  */
 export async function syncHackMeAfterLocalSolve() {
-  const { baseUrl, labId, token } = readLaunchContext();
+  const { baseUrl, labId, token, deviceBind, macAddress, clientLocalIp } = readLaunchContext();
   if (labId < 1 || !token) {
     return {
       syncAttempted: false,
@@ -71,7 +74,13 @@ export async function syncHackMeAfterLocalSolve() {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lab_id: labId, token })
+      body: JSON.stringify({ 
+        lab_id: labId, 
+        token,
+        device_bind: deviceBind,
+        mac_address: macAddress,
+        client_local_ip: clientLocalIp
+      })
     });
     const data = await res.json().catch(() => ({}));
     const ok = res.ok && data.success;

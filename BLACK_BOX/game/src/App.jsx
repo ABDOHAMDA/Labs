@@ -6,7 +6,7 @@ import { useFroggerEngine } from "./game/useFroggerEngine";
 
 const LAB_FLAG = "FLAG{FROGGER_DEVTOOLS_OVERRIDE}";
 const HACKME_API_BASE =
-  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/api";
+  window.location.protocol + "//" + window.location.hostname + "/HackMe/server/controllers/labs";
 const LAB_POINTS = 300;
 
 export default function App() {
@@ -113,15 +113,13 @@ export default function App() {
     }
     const payload = {
       lab_id: Number(labId),
-      flag: LAB_FLAG,
-      user_id: Number(userId) || 0,
-      access_token: token,
+      token: token || "",
       device_bind: deviceBind || "",
       mac_address: machineMac || "",
       client_local_ip: clientLocalIp || "",
     };
     try {
-      const res = await fetch(`${HACKME_API_BASE}/submit_flag.php`, {
+      const res = await fetch(`${HACKME_API_BASE}/labs_api/lab_solved.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -139,12 +137,11 @@ export default function App() {
         };
       }
 
-      const message = data?.message;
+      const message = String(data?.message || "");
       const accepted =
         Boolean(data?.success) ||
-        message === "FLAG_CAPTURED" ||
-        message === "LAB_ALREADY_SOLVED" ||
-        message === "FLAG_ALREADY_SUBMITTED";
+        message === "LAB_SOLVED" ||
+        message === "LAB_ALREADY_SOLVED";
       if (!accepted) {
         return {
           ok: false,
@@ -154,8 +151,8 @@ export default function App() {
         };
       }
 
-      const isFirstTime = message === "FLAG_CAPTURED";
-      const points = isFirstTime ? Number(data?.points ?? LAB_POINTS) : 0;
+      const isFirstTime = message === "LAB_SOLVED";
+      const points = isFirstTime ? Number(data?.data?.points_earned ?? LAB_POINTS) : 0;
       const safePoints = Number.isFinite(points) && points > 0 ? points : 0;
 
       if (window.opener) {
