@@ -4,11 +4,12 @@ WORKDIR /app
 
 COPY package.json ./
 
+# Install dependencies during build for faster startup
 RUN npm install
 
 COPY . .
 
 EXPOSE 5173
 
-# Install deps on start so volume mount doesn't hide node_modules (e.g. react-router-dom)
-CMD ["sh", "-c", "npm install && npm run dev"]
+# Just run dev, don't re-install every time
+CMD ["npm", "run", "dev"]

@@ -162,11 +162,19 @@ var Game = {
             this.updateHud('Hash matched: ' + replayHash + ' | Submitting solve...')
             var result = await this.submitLabSolved()
             if (result.ok) {
-                this.updateHud('Lab solved successfully. Points earned: ' + result.points)
-                this.showMessage('Lab solved successfully. Points: ' + result.points)
+                if (result.alreadySolved) {
+                    this.updateHud('Already solved. No extra points.')
+                    this.showMessage('Lab already solved. Points: 0')
+                    window.alert('Already solved! You have completed this lab before, so no additional points were awarded.')
+                } else {
+                    this.updateHud('Lab solved successfully. Points earned: ' + result.points)
+                    this.showMessage('Lab solved successfully. Points: ' + result.points)
+                    window.alert('Congratulations! Lab solved successfully. You earned ' + result.points + ' points!')
+                }
             } else {
                 this.updateHud('Solved locally but submit failed: ' + result.message)
                 this.showMessage('Solved locally but submission failed: ' + result.message)
+                window.alert('Submission Error: ' + result.message)
             }
         } catch (e) {
             this.updateHud('Error while processing hash flow. Restarting attempt.')
@@ -230,7 +238,8 @@ var Game = {
             client_local_ip: this.session.clientLocalIp || '',
         }
         try {
-            var res = await fetch('http://localhost/HackMe/server/controllers/labs/labs_api/lab_solved.php', {
+            var apiBase = window.location.origin + '/HackMe/server/controllers/labs/labs_api/lab_solved.php'
+            var res = await fetch(apiBase, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -259,7 +268,7 @@ var Game = {
                 )
                 window.opener.postMessage({ type: 'LAB_SOLVED', labId: Number(this.session.labId || 42) }, '*')
             }
-            return { ok: true, points: safePoints, message: 'Lab solved.' }
+            return { ok: true, points: safePoints, message: 'Lab solved.', alreadySolved: !isFirst }
         } catch (_) {
             return { ok: false, points: 0, message: 'Network error while submitting.' }
         }
