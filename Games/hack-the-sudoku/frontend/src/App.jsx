@@ -261,8 +261,8 @@ export default function App() {
             <p className="method-row">
               Method: <strong>{method}</strong>
             </p>
-            
-            
+
+
             {hackmeLine.text && (
               <p className={hackmeLine.className} role="status">
                 {hackmeLine.text}
@@ -297,11 +297,7 @@ export default function App() {
         <section className="card">
           <h1>{SUDOKU_LAB_CONFIG.title}</h1>
           <p className="subtitle">Looks like Sudoku. Plays like a CTF lab.</p>
-          <p className="discover-hint" role="note">
-            <strong>Recon:</strong> In <strong>Elements</strong> / View Source, look for the second module script:{" "}
-            <code>labApp.js</code> (or <code>src="js/labApp.js"</code> in the page comment) — open it in <strong>Sources</strong>, or
-            in <strong>Console</strong> run <code>winGame()</code>.
-          </p>
+
           <div className="grid">
             {grid.map((value, idx) => (
               <input
