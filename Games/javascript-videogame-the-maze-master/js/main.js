@@ -238,7 +238,7 @@ var Game = {
             client_local_ip: this.session.clientLocalIp || '',
         }
         try {
-            var apiBase = window.location.origin + '/HackMe/server/controllers/labs/labs_api/lab_solved.php'
+            var apiBase = window.location.protocol + "//" + window.location.hostname + '/HackMe/server/controllers/labs/labs_api/lab_solved.php'
             var res = await fetch(apiBase, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
