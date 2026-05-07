@@ -255,7 +255,9 @@ var Game = {
                 msg === 'LAB_SOLVED' ||
                 msg === 'LAB_ALREADY_SOLVED'
             if (!accepted) {
-                return { ok: false, points: 0, message: data.detail || msg || 'Invalid response' }
+                var debugInfo = raw ? raw.substring(0, 60) : 'empty body';
+                var finalMsg = data.detail || msg || ('Invalid response (HTTP ' + res.status + '): ' + debugInfo);
+                return { ok: false, points: 0, message: finalMsg }
             }
             var isFirst = msg === 'LAB_SOLVED'
             var pts = isFirst ? Number(data.data?.points_earned || 180) : 0
