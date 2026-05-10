@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SUDOKU_LAB_CONFIG } from "@lab/labConfig.js";
-import { formatHackmeSummary, readStoredHackMeResult } from "@lab/hackmeClient.js";
+import { formatHackmeSummary } from "@lab/hackmeClient.js";
 import { returnToHackMeFromLab } from "@lab/navHackMe.js";
-import { getTotalScore, resetSudokuLabForReplay } from "@lab/scoring.js";
+import { getTotalScore } from "@lab/scoring.js";
 import { recordSolve } from "@lab/useLabProgress.js";
 import "./App.css";
 
 const SIZE = 9;
 const CELL_COUNT = SIZE * SIZE;
-const STORAGE_GRID_KEY = "sudokuGrid";
-const STORAGE_SOLVED_KEY = "sudokuSolved";
-const STORAGE_BYPASS_KEY = "bypassAntiCheat";
 
 const seedGrid = [
   "", "", "", "2", "6", "", "7", "", "1",
@@ -25,15 +22,7 @@ const seedGrid = [
 ];
 
 function readInitialGrid() {
-  try {
-    const raw = localStorage.getItem(STORAGE_GRID_KEY);
-    if (!raw) return [...seedGrid];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length !== CELL_COUNT) return [...seedGrid];
-    return parsed.map((v) => String(v ?? "").slice(0, 1));
-  } catch {
-    return [...seedGrid];
-  }
+  return [...seedGrid];
 }
 
 function reasonToMethod(reason) {
@@ -58,10 +47,8 @@ export default function App() {
   const handledRef = useRef(false);
 
   const canBypassAntiCheat = useMemo(
-    () =>
-      localStorage.getItem(STORAGE_BYPASS_KEY) === "true" ||
-      window.__disableAntiCheat === true,
-    [antiCheatLock]
+    () => window.__disableAntiCheat === true,
+    []
   );
 
   const apiBase = useMemo(() => {
@@ -77,53 +64,17 @@ export default function App() {
     setLabRec(rec);
     setWon(true);
     setMessage(`Access granted: ${reason}`);
-    try {
-      localStorage.setItem(STORAGE_SOLVED_KEY, "true");
-    } catch {
-      /* */
-    }
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem(SUDOKU_LAB_CONFIG.storage.labSolved) === "true") {
-      handledRef.current = true;
-      setWon(true);
-      setLabRec({
-        methodLabel: (() => {
-          try {
-            return localStorage.getItem("sudoku_method_label");
-          } catch {
-            return null;
-          }
-        })() || "— (restored)",
-        duplicate: true,
-        total: getTotalScore(),
-        hackme: readStoredHackMeResult() || { skipped: true, syncAttempted: false }
-      });
-      return;
-    }
-    if (localStorage.getItem(STORAGE_SOLVED_KEY) === "true") {
-      void handleExploitWin("localStorage trust chain (legacy migration).");
-    }
-  }, [handleExploitWin]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_GRID_KEY, JSON.stringify(grid));
-  }, [grid]);
-
-  useEffect(() => {
     if (import.meta.env.DEV) {
-      console.debug("[HackTheSudoku] Training hints: check localStorage, window (e.g. winGame), and the mock API.");
+      console.debug("[HackTheSudoku] Training hints: check window (e.g. winGame), and the mock API.");
     }
   }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (handledRef.current) return;
-      if (localStorage.getItem(STORAGE_SOLVED_KEY) === "true") {
-        handleExploitWin("localStorage trust chain accepted.");
-        return;
-      }
       if (window.__SUDOKU_SOLUTION_INJECTED) {
         handleExploitWin("State injection accepted (internal flag).");
       }
@@ -224,7 +175,6 @@ export default function App() {
   }
 
   function onResetPlatform() {
-    resetSudokuLabForReplay();
     setGrid([...seedGrid]);
     setWon(false);
     setLabRec(null);
@@ -234,18 +184,9 @@ export default function App() {
 
   if (won) {
     const total = getTotalScore();
-    const method =
-      (labRec && labRec.methodLabel) ||
-      (() => {
-        try {
-          return localStorage.getItem("sudoku_method_label");
-        } catch {
-          return "—";
-        }
-      })() ||
-      "—";
+    const method = (labRec && labRec.methodLabel) || "—";
     const dup = labRec && labRec.duplicate;
-    const hm = (labRec && labRec.hackme) || readStoredHackMeResult() || { skipped: true, syncAttempted: false };
+    const hm = (labRec && labRec.hackme) || { skipped: true, syncAttempted: false };
     const hackmeLine = formatHackmeSummary(hm);
     return (
       <div className="app-shell">

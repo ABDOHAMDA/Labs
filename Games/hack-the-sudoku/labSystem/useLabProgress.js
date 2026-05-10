@@ -25,13 +25,6 @@ export async function recordSolve(detail) {
   if (m === "logic bypass") ctx = "injection";
 
   const r = awardSudokuIfEligible(ctx);
-  if (r.awarded) {
-    try {
-      localStorage.setItem("sudoku_method_label", label);
-    } catch {
-      /* */
-    }
-  }
 
   let hackme = { skipped: true, syncAttempted: false };
   if (r.awarded) {
@@ -55,10 +48,7 @@ export async function recordSolve(detail) {
 }
 
 export function isSolved() {
-  return (
-    localStorage.getItem(SUDOKU_LAB_CONFIG.storage.legacySolved) === "true" ||
-    localStorage.getItem(SUDOKU_LAB_CONFIG.storage.labSolved) === "true"
-  );
+  return false;
 }
 
 export function snapshot() {
