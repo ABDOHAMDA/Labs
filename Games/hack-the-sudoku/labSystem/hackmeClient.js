@@ -31,20 +31,9 @@ export function readLaunchContext() {
   return { baseUrl: getHackMeBase(), labId, token, deviceBind, macAddress, clientLocalIp };
 }
 
+// readStoredHackMeResult removed - frontend is now stateless between sessions.
 export function readStoredHackMeResult() {
-  try {
-    const s = localStorage.getItem(LS_HACKME);
-    if (!s) return null;
-    const o = JSON.parse(s);
-    return {
-      ok: o.ok,
-      message: o.message,
-      pointsEarned: o.points != null ? Number(o.points) : 0,
-      alreadyOnServer: o.message === "LAB_ALREADY_SOLVED"
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /**
@@ -74,8 +63,8 @@ export async function syncHackMeAfterLocalSolve() {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        lab_id: labId, 
+      body: JSON.stringify({
+        lab_id: labId,
         token,
         device_bind: deviceBind,
         mac_address: macAddress,
@@ -87,11 +76,7 @@ export async function syncHackMeAfterLocalSolve() {
     const pts = (data.data && data.data.points_earned) != null ? Number(data.data.points_earned) : 0;
     const msg = String(data.message || "");
     const already = msg === "LAB_ALREADY_SOLVED" || (data.data && (data.data.already_solved === true));
-    try {
-      localStorage.setItem(LS_HACKME, JSON.stringify({ ok, message: msg, points: pts, labId, at: Date.now() }));
-    } catch {
-      /* */
-    }
+
     return {
       syncAttempted: true,
       ok,
