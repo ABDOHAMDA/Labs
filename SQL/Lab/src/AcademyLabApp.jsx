@@ -738,8 +738,8 @@ const AcademyLabApp = () => {
       }
       // Default view: if it's a UNION but not a specific step, might be a partial attempt
       if (!isDefaultCourseId && idLower.includes("union")) {
-         // If they haven't reached step 4, hide admin rows from general UNION results
-         return sorted.filter(r => r.role !== 'admin' || r.password === '1');
+        // If they haven't reached step 4, hide admin rows from general UNION results
+        return sorted.filter(r => r.role !== 'admin' || r.password === '1');
       }
       return sorted;
     })();
@@ -899,6 +899,15 @@ const AcademyLabApp = () => {
               {loading ? "Signing in…" : "Log in"}
             </button>
           </form>
+          <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <p className="text-xs font-semibold text-amber-800 mb-1">
+              Hint
+            </p>
+            <p className="text-sm text-amber-700">
+              Try using a default student account like:
+              <span className="font-mono font-semibold"> student1 / Stu001!</span>
+            </p>
+          </div>
         </div>
       </div>
     </div>
